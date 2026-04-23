@@ -1079,6 +1079,50 @@ class DocumentadorPBIP:
             codigo = '\n'.join(linhas)
         return codigo.strip()
     
+    def _gerar_codigo_mermaid(self) -> str:
+        """Gera o código do diagrama ER em formato Mermaid"""
+        mermaid = ["erDiagram"]
+        
+        # Função auxiliar para limpar nomes e evitar erros de sintaxe no Mermaid
+        def limpar_nome_mermaid(nome: str) -> str:
+            import re
+            # Substitui qualquer caractere que não seja letra, número ou underscore por _
+            resultado = re.sub(r'[^a-zA-Z0-9_]', '_', str(nome))
+            # Mermaid não aceita nomes que começam com número
+            if resultado and resultado[0].isdigit():
+                resultado = "T_" + resultado
+            return resultado
+
+        # Adiciona definição das tabelas e colunas no diagrama
+        for tabela in self.tabelas:
+            # Omitir tabelas de calendário automáticas
+            if 'LocalDateTable' in tabela.nome or 'DateTableTemplate' in tabela.nome:
+                continue
+            nome_tab = limpar_nome_mermaid(tabela.nome)
+            mermaid.append(f"    {nome_tab} {{")
+            # Limite de colunas para o diagrama não ficar gigantesco (Top 10)
+            for col in tabela.colunas[:10]:
+                tipo = limpar_nome_mermaid(col.tipo_dado or "string")
+                nome_col = limpar_nome_mermaid(col.nome)
+                mermaid.append(f"        {tipo} {nome_col}")
+            if len(tabela.colunas) > 10:
+                mermaid.append(f"        string outras_colunas_ocultas")
+            mermaid.append(f"    }}")
+        
+        # Adiciona as ligações (relacionamentos)
+        for rel in self.relacionamentos:
+            if 'LocalDateTable' in rel.tabela_destino or 'DateTableTemplate' in rel.tabela_destino:
+                continue
+            tabela_origem = limpar_nome_mermaid(rel.tabela_origem)
+            tabela_destino = limpar_nome_mermaid(rel.tabela_destino)
+            coluna_origem = rel.coluna_origem.replace("'", "")
+            
+            # }|--|| = muitos-para-um (bidirecional)  |  }o--|| = muitos-para-um (unidirecional)
+            tipo_rel = "}|--||" if rel.filtro_bidirecional else "}o--||"
+            mermaid.append("    " + tabela_origem + " " + tipo_rel + " " + tabela_destino + ' : "' + coluna_origem + '"')
+        
+        return "\n".join(mermaid)
+
     def gerar_documentacao(self) -> str:
         """
         Gera a documentação em Markdown
@@ -1157,45 +1201,8 @@ class DocumentadorPBIP:
             md.append(f"### Diagrama de Relacionamentos (ER)")
             md.append(f"")
             md.append(f"```mermaid")
-            md.append(f"erDiagram")
-            
-            # Função auxiliar para limpar nomes e evitar erros de sintaxe no Mermaid
-            def limpar_nome_mermaid(nome: str) -> str:
-                # Substitui qualquer caractere que não seja letra, número ou underscore por _
-                resultado = re.sub(r'[^a-zA-Z0-9_]', '_', str(nome))
-                # Mermaid não aceita nomes que começam com número
-                if resultado and resultado[0].isdigit():
-                    resultado = "T_" + resultado
-                return resultado
+            md.append(self._gerar_codigo_mermaid())
 
-            # Adiciona definição das tabelas e colunas no diagrama
-            for tabela in self.tabelas:
-                # Omitir tabelas de calendário automáticas
-                if 'LocalDateTable' in tabela.nome or 'DateTableTemplate' in tabela.nome:
-                    continue
-                nome_tab = limpar_nome_mermaid(tabela.nome)
-                md.append(f"    {nome_tab} {{")
-                # Limite de colunas para o diagrama não ficar gigantesco (Top 10)
-                for col in tabela.colunas[:10]:
-                    tipo = limpar_nome_mermaid(col.tipo_dado or "string")
-                    nome_col = limpar_nome_mermaid(col.nome)
-                    md.append(f"        {tipo} {nome_col}")
-                if len(tabela.colunas) > 10:
-                    md.append(f"        string outras_colunas_ocultas")
-                md.append(f"    }}")
-            
-            # Adiciona as ligações (relacionamentos)
-            for rel in self.relacionamentos:
-                if 'LocalDateTable' in rel.tabela_destino or 'DateTableTemplate' in rel.tabela_destino:
-                    continue
-                tabela_origem = limpar_nome_mermaid(rel.tabela_origem)
-                tabela_destino = limpar_nome_mermaid(rel.tabela_destino)
-                coluna_origem = rel.coluna_origem.replace("'", "")
-                
-                # }|--|| = muitos-para-um (bidirecional)  |  }o--|| = muitos-para-um (unidirecional)
-                tipo_rel = "}|--||" if rel.filtro_bidirecional else "}o--||"
-                md.append("    " + tabela_origem + " " + tipo_rel + " " + tabela_destino + ' : "' + coluna_origem + '"')
-            
             md.append("```")
             md.append("")
             md.append("*Legenda: `}|--||` = Filtro Bidirecional | `}o--||` = Filtro Único*")
@@ -1995,15 +2002,34 @@ class DocumentadorPBIP:
         # MODELO DE DADOS
         # ====================================================================
         doc.add_heading("Modelo de Dados", level=1)
-        doc.add_heading("Configuração", level=2)
         
-        config_data = [
-            ["Cultura", self.info_modelo.cultura or "—"],
-            ["Versão", self.info_modelo.versao_datasource or "—"],
-            ["Tabelas", str(len(self.tabelas))],
-            ["Relacionamentos", str(len(self.relacionamentos))],
-        ]
-        _add_table(["Propriedade", "Valor"], config_data)
+        # Diagrama ER (Mermaid)
+        if self.tabelas or self.relacionamentos:
+            doc.add_heading("Diagrama de Relacionamentos (ER)", level=2)
+            _add_info_box("Diagrama Mermaid gerado automaticamente. Copie o bloco de código abaixo e cole em um visualizador online (como o mermaid.live) para ver o relacionamento entre as tabelas.", "info")
+            _add_code_block(self._gerar_codigo_mermaid(), "MERMAID")
+            
+        # Lista de Relacionamentos
+        if self.relacionamentos:
+            doc.add_heading("Lista de Relacionamentos", level=2)
+            
+            _add_info_box(
+                f"O modelo possui {len(self.relacionamentos)} relacionamentos entre tabelas.",
+                "info"
+            )
+            
+            rows_rel = []
+            for rel in self.relacionamentos:
+                origem = f"{rel.tabela_origem}.{rel.coluna_origem}"
+                destino = f"{rel.tabela_destino}.{rel.coluna_destino}"
+                bidi = "Sim" if rel.filtro_bidirecional else "Não"
+                ativo = "Sim" if rel.esta_ativo else "Não"
+                rows_rel.append([origem, "→", destino, bidi, ativo])
+            
+            _add_table(
+                ["Origem", "", "Destino", "Bidirecional", "Ativo"],
+                rows_rel, compact=True
+            )
         
         # Grupos de Consulta
         if self.info_modelo.grupos_consulta:
@@ -2173,30 +2199,6 @@ class DocumentadorPBIP:
                 lang = "Power Query M" if "let" in codigo_formatado[:20].lower() else "DAX"
                 _add_code_block(codigo_formatado, lang)
         
-        # ====================================================================
-        # RELACIONAMENTOS
-        # ====================================================================
-        if self.relacionamentos:
-            doc.add_page_break()
-            doc.add_heading("Relacionamentos", level=1)
-            
-            _add_info_box(
-                f"O modelo possui {len(self.relacionamentos)} relacionamentos entre tabelas.",
-                "info"
-            )
-            
-            rows_rel = []
-            for rel in self.relacionamentos:
-                origem = f"{rel.tabela_origem}.{rel.coluna_origem}"
-                destino = f"{rel.tabela_destino}.{rel.coluna_destino}"
-                bidi = "Sim" if rel.filtro_bidirecional else "Não"
-                ativo = "Sim" if rel.esta_ativo else "Não"
-                rows_rel.append([origem, "→", destino, bidi, ativo])
-            
-            _add_table(
-                ["Origem", "", "Destino", "Bidirecional", "Ativo"],
-                rows_rel, compact=True
-            )
         
         # ====================================================================
         # PÁGINAS DO RELATÓRIO
