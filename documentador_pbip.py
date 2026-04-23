@@ -1167,17 +1167,25 @@ class DocumentadorPBIP:
             md.append(f"```mermaid")
             md.append(f"erDiagram")
             
+            # Função auxiliar para limpar nomes e evitar erros de sintaxe no Mermaid
+            def limpar_nome_mermaid(nome: str) -> str:
+                # Substitui qualquer caractere que não seja letra, número ou underscore por _
+                return re.sub(r'[^a-zA-Z0-9_]', '_', str(nome))
+
             # Adiciona definição das tabelas e colunas no diagrama
             for tabela in self.tabelas:
                 # Omitir tabelas de calendário automáticas
                 if 'LocalDateTable' in tabela.nome or 'DateTableTemplate' in tabela.nome:
                     continue
-                nome_tab = tabela.nome.replace("'", "").replace(" ", "_").replace("-", "_")
+                nome_tab = limpar_nome_mermaid(tabela.nome)
                 md.append(f"    {nome_tab} {{")
                 # Limite de colunas para o diagrama não ficar gigantesco (Top 10)
                 for col in tabela.colunas[:10]:
-                    tipo = (col.tipo_dado or "string").replace(" ", "_").replace(".", "_")
-                    nome_col = col.nome.replace(" ", "_").replace('"', '').replace("-", "_").replace(".", "_")
+                    tipo = limpar_nome_mermaid(col.tipo_dado or "string")
+                    nome_col = limpar_nome_mermaid(col.nome)
+                    # Adiciona prefixo se o nome da coluna começar com número (Mermaid não gosta)
+                    if nome_col and nome_col[0].isdigit():
+                        nome_col = "c_" + nome_col
                     md.append(f"        {tipo} {nome_col}")
                 if len(tabela.colunas) > 10:
                     md.append(f"        string outras_colunas_ocultas")
@@ -1187,8 +1195,8 @@ class DocumentadorPBIP:
             for rel in self.relacionamentos:
                 if 'LocalDateTable' in rel.tabela_destino or 'DateTableTemplate' in rel.tabela_destino:
                     continue
-                tabela_origem = rel.tabela_origem.replace("'", "").replace(" ", "_").replace("-", "_")
-                tabela_destino = rel.tabela_destino.replace("'", "").replace(" ", "_").replace("-", "_")
+                tabela_origem = limpar_nome_mermaid(rel.tabela_origem)
+                tabela_destino = limpar_nome_mermaid(rel.tabela_destino)
                 coluna_origem = rel.coluna_origem.replace("'", "")
                 
                 tipo_rel = "}}|--||" if rel.filtro_bidirecional else "}}o--||"
