@@ -1150,15 +1150,7 @@ class DocumentadorPBIP:
         # ========================================================================
         md.append(f"## 🗂️ Modelo de Dados")
         md.append(f"")
-        md.append(f"### Configuração")
-        md.append(f"")
-        md.append(f"| Propriedade | Valor |")
-        md.append(f"|:------------|:------|")
-        md.append(f"| 🌐 Cultura | `{self.info_modelo.cultura}` |")
-        md.append(f"| 📦 Versão | `{self.info_modelo.versao_datasource}` |")
-        md.append(f"| 📁 Tabelas | {len(self.tabelas)} |")
-        md.append(f"| 🔗 Relacionamentos | {len(self.relacionamentos)} |")
-        md.append(f"")
+
         
         # Diagrama de Relacionamentos (Mermaid)
         if self.tabelas or self.relacionamentos:
