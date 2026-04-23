@@ -1200,13 +1200,14 @@ class DocumentadorPBIP:
                 tabela_destino = limpar_nome_mermaid(rel.tabela_destino)
                 coluna_origem = rel.coluna_origem.replace("'", "")
                 
-                tipo_rel = "}}|--||" if rel.filtro_bidirecional else "}}o--||"
-                md.append(f"    {tabela_origem} {tipo_rel} {tabela_destino} : \"{coluna_origem}\"")
+                # }|--|| = muitos-para-um (bidirecional)  |  }o--|| = muitos-para-um (unidirecional)
+                tipo_rel = "}|--||" if rel.filtro_bidirecional else "}o--||"
+                md.append("    " + tabela_origem + " " + tipo_rel + " " + tabela_destino + ' : "' + coluna_origem + '"')
             
-            md.append(f"```")
-            md.append(f"")
-            md.append(f"*Legenda: `}}|--||` = Filtro Bidirecional | `}}o--||` = Filtro Único*")
-            md.append(f"")
+            md.append("```")
+            md.append("")
+            md.append("*Legenda: `}|--||` = Filtro Bidirecional | `}o--||` = Filtro Único*")
+            md.append("")
         
         # Grupos de Consulta
         if self.info_modelo.grupos_consulta:
