@@ -1200,6 +1200,24 @@ class DocumentadorPBIP:
             md.append("")
             md.append("*Legenda: `}|--||` = Filtro Bidirecional | `}o--||` = Filtro Único*")
             md.append("")
+        # Relacionamentos (Tabela)
+        if self.relacionamentos:
+            md.append(f"")
+            md.append(f"### 🔗 Lista de Relacionamentos")
+            md.append(f"")
+            md.append(f"*Total: {len(self.relacionamentos)} relacionamentos*")
+            md.append(f"")
+            md.append(f"| Origem | → | Destino | Bidirecional | Ativo |")
+            md.append(f"|--------|---|---------|--------------|-------|")
+            
+            for rel in self.relacionamentos:
+                origem = f"{rel.tabela_origem}.{rel.coluna_origem}"
+                destino = f"{rel.tabela_destino}.{rel.coluna_destino}"
+                bidirecional = "Sim" if rel.filtro_bidirecional else "Não"
+                ativo = "Sim" if rel.esta_ativo else "Não"
+                md.append(f"| {origem} | → | {destino} | {bidirecional} | {ativo} |")
+            
+            md.append(f"")
         
         # Grupos de Consulta
         if self.info_modelo.grupos_consulta:
@@ -1406,26 +1424,6 @@ class DocumentadorPBIP:
                 md.append(codigo_formatado)
                 md.append(f"```")
                 md.append(f"")
-        
-        # Relacionamentos
-        if self.relacionamentos:
-            md.append(f"---")
-            md.append(f"")
-            md.append(f"## 🔗 Relacionamentos")
-            md.append(f"")
-            md.append(f"*Total: {len(self.relacionamentos)} relacionamentos*")
-            md.append(f"")
-            md.append(f"| Origem | → | Destino | Bidirecional | Ativo |")
-            md.append(f"|--------|---|---------|--------------|-------|")
-            
-            for rel in self.relacionamentos:
-                origem = f"{rel.tabela_origem}.{rel.coluna_origem}"
-                destino = f"{rel.tabela_destino}.{rel.coluna_destino}"
-                bidirecional = "Sim" if rel.filtro_bidirecional else "Não"
-                ativo = "Sim" if rel.esta_ativo else "Não"
-                md.append(f"| {origem} | → | {destino} | {bidirecional} | {ativo} |")
-            
-            md.append(f"")
         
         # Páginas do Relatório (sempre exibe, mesmo quando 0)
         md.append(f"---")
