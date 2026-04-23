@@ -1176,11 +1176,11 @@ class DocumentadorPBIP:
                 md.append(f"    {nome_tab} {{")
                 # Limite de colunas para o diagrama não ficar gigantesco (Top 10)
                 for col in tabela.colunas[:10]:
-                    tipo = (col.tipo_dado or "string").replace(" ", "_")
-                    nome_col = col.nome.replace(" ", "_").replace('"', '').replace("-", "_")
+                    tipo = (col.tipo_dado or "string").replace(" ", "_").replace(".", "_")
+                    nome_col = col.nome.replace(" ", "_").replace('"', '').replace("-", "_").replace(".", "_")
                     md.append(f"        {tipo} {nome_col}")
                 if len(tabela.colunas) > 10:
-                    md.append(f"        string ..._mais_colunas")
+                    md.append(f"        string outras_colunas_ocultas")
                 md.append(f"    }}")
             
             # Adiciona as ligações (relacionamentos)
