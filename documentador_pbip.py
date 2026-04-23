@@ -1170,7 +1170,11 @@ class DocumentadorPBIP:
             # Função auxiliar para limpar nomes e evitar erros de sintaxe no Mermaid
             def limpar_nome_mermaid(nome: str) -> str:
                 # Substitui qualquer caractere que não seja letra, número ou underscore por _
-                return re.sub(r'[^a-zA-Z0-9_]', '_', str(nome))
+                resultado = re.sub(r'[^a-zA-Z0-9_]', '_', str(nome))
+                # Mermaid não aceita nomes que começam com número
+                if resultado and resultado[0].isdigit():
+                    resultado = "T_" + resultado
+                return resultado
 
             # Adiciona definição das tabelas e colunas no diagrama
             for tabela in self.tabelas:
@@ -1183,9 +1187,6 @@ class DocumentadorPBIP:
                 for col in tabela.colunas[:10]:
                     tipo = limpar_nome_mermaid(col.tipo_dado or "string")
                     nome_col = limpar_nome_mermaid(col.nome)
-                    # Adiciona prefixo se o nome da coluna começar com número (Mermaid não gosta)
-                    if nome_col and nome_col[0].isdigit():
-                        nome_col = "c_" + nome_col
                     md.append(f"        {tipo} {nome_col}")
                 if len(tabela.colunas) > 10:
                     md.append(f"        string outras_colunas_ocultas")
