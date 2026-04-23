@@ -166,7 +166,7 @@ class DocumentadorGUI:
         ).pack(fill=tk.X, pady=(0, 5))
         
         projetos_frame = tk.Frame(main_frame, bg=self.cor_container, padx=15, pady=15)
-        projetos_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 20))
+        # O pack será feito no final para garantir que o layout responsivo funcione
         
         # Dica de uso
         self.label_dica = tk.Label(
@@ -235,7 +235,7 @@ class DocumentadorGUI:
         
         # --- ÁREA DE AÇÃO ---
         action_frame = tk.Frame(main_frame, bg=self.cor_fundo)
-        action_frame.pack(fill=tk.X)
+        # pack movido para o final
         
         self.btn_gerar = self._criar_botao(
             action_frame, text="GERAR DOCUMENTAÇÃO",
@@ -282,6 +282,13 @@ class DocumentadorGUI:
             main_frame, text="v2.0 | Suporte a múltiplas pastas",
             font=("Segoe UI", 8), fg="#585b70", bg=self.cor_fundo
         ).pack(side=tk.BOTTOM)
+        
+        # Ancorar o action_frame no fundo, logo acima do rodapé
+        action_frame.pack(side=tk.BOTTOM, fill=tk.X)
+        
+        # O projetos_frame agora preenche todo o espaço restante no meio,
+        # sem empurrar os elementos inferiores para fora da janela
+        projetos_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True, pady=(0, 20))
     
     # ========================================================================
     # SELEÇÃO E SCAN
@@ -496,6 +503,7 @@ class DocumentadorGUI:
             nomes_erro = ", ".join(nome for nome, _ in erros)
             self.status_texto.set(f"❌ Falha em todos os {total} projeto(s). Erros: {nomes_erro}")
             self.label_status.config(fg=self.cor_erro)
+            messagebox.showerror("Erro na Geração", f"Falha ao gerar documentação para os projetos:\n{nomes_erro}")
         elif erros:
             nomes_erro = ", ".join(nome for nome, _ in erros)
             self.status_texto.set(
@@ -503,12 +511,18 @@ class DocumentadorGUI:
             )
             self.label_status.config(fg=self.cor_aviso)
             self._mostrar_botao_abrir(pastas_saida)
+            abrir = messagebox.askyesno("Aviso", f"{len(sucessos)} projetos documentados, mas houve falhas em:\n{nomes_erro}\n\nDeseja abrir a pasta da documentação agora?")
+            if abrir and pastas_saida:
+                self._abrir_pasta(list(pastas_saida)[0])
         else:
             self.status_texto.set(
                 f"✅ Sucesso! {len(sucessos)} projeto(s) documentado(s)."
             )
             self.label_status.config(fg=self.cor_sucesso)
             self._mostrar_botao_abrir(pastas_saida)
+            abrir = messagebox.askyesno("Sucesso", f"Documentação gerada com sucesso para {len(sucessos)} projeto(s)!\n\nDeseja abrir a pasta da documentação agora?")
+            if abrir and pastas_saida:
+                self._abrir_pasta(list(pastas_saida)[0])
     
     def _mostrar_botao_abrir(self, pastas_saida: set):
         """Mostra botão para abrir a pasta de saída"""
