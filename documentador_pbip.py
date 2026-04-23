@@ -1161,31 +1161,42 @@ class DocumentadorPBIP:
         md.append(f"")
         
         # Diagrama de Relacionamentos (Mermaid)
-        if self.relacionamentos:
-            md.append(f"### Diagrama de Relacionamentos")
+        if self.tabelas or self.relacionamentos:
+            md.append(f"### Diagrama de Relacionamentos (ER)")
             md.append(f"")
             md.append(f"```mermaid")
             md.append(f"erDiagram")
             
-            # Agrupa relacionamentos por tabelas únicas
-            tabelas_no_diagrama = set()
-            for rel in self.relacionamentos:
-                # Ignora LocalDateTable para simplificar diagrama
-                if 'LocalDateTable' in rel.tabela_destino:
+            # Adiciona definição das tabelas e colunas no diagrama
+            for tabela in self.tabelas:
+                # Omitir tabelas de calendário automáticas
+                if 'LocalDateTable' in tabela.nome or 'DateTableTemplate' in tabela.nome:
                     continue
-                tabela_origem = rel.tabela_origem.replace("'", "").replace(" ", "_")
-                tabela_destino = rel.tabela_destino.replace("'", "").replace(" ", "_")
+                nome_tab = tabela.nome.replace("'", "").replace(" ", "_").replace("-", "_")
+                md.append(f"    {nome_tab} {{")
+                # Limite de colunas para o diagrama não ficar gigantesco (Top 10)
+                for col in tabela.colunas[:10]:
+                    tipo = (col.tipo_dado or "string").replace(" ", "_")
+                    nome_col = col.nome.replace(" ", "_").replace('"', '').replace("-", "_")
+                    md.append(f"        {tipo} {nome_col}")
+                if len(tabela.colunas) > 10:
+                    md.append(f"        string ..._mais_colunas")
+                md.append(f"    }}")
+            
+            # Adiciona as ligações (relacionamentos)
+            for rel in self.relacionamentos:
+                if 'LocalDateTable' in rel.tabela_destino or 'DateTableTemplate' in rel.tabela_destino:
+                    continue
+                tabela_origem = rel.tabela_origem.replace("'", "").replace(" ", "_").replace("-", "_")
+                tabela_destino = rel.tabela_destino.replace("'", "").replace(" ", "_").replace("-", "_")
                 coluna_origem = rel.coluna_origem.replace("'", "")
-                coluna_destino = rel.coluna_destino.replace("'", "")
                 
                 tipo_rel = "}}|--||" if rel.filtro_bidirecional else "}}o--||"
                 md.append(f"    {tabela_origem} {tipo_rel} {tabela_destino} : \"{coluna_origem}\"")
-                tabelas_no_diagrama.add(tabela_origem)
-                tabelas_no_diagrama.add(tabela_destino)
             
             md.append(f"```")
             md.append(f"")
-            md.append(f"*Legenda: `}}|--||` = Bidirecional | `}}o--||` = Unidirecional*")
+            md.append(f"*Legenda: `}}|--||` = Filtro Bidirecional | `}}o--||` = Filtro Único*")
             md.append(f"")
         
         # Grupos de Consulta
