@@ -2683,9 +2683,14 @@ class DocumentadorPBIP:
         # ====================================================================
         # SALVAR
         # ====================================================================
-        doc.save(str(caminho_saida))
-        print(f"[OK] Documentação DOCX salva em: {caminho_saida}")
-        return caminho_saida
+        try:
+            doc.save(str(caminho_saida))
+            print(f"[OK] Documentação DOCX salva em: {caminho_saida}")
+            return caminho_saida
+        except PermissionError:
+            msg_erro = f"[ERRO] Permissão negada ao salvar {caminho_saida}. O arquivo DOCX está aberto no Microsoft Word? Feche-o e tente novamente."
+            print(msg_erro)
+            raise PermissionError(msg_erro)
 
 
 # ============================================================================

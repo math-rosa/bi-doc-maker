@@ -542,6 +542,8 @@ class DocumentadorGUI:
                 resultados_sucesso.append(nome_pasta)
                 pastas_saida.add(pasta_raiz)
                 
+            except PermissionError as e:
+                resultados_erro.append((nome_pasta, "O arquivo já está aberto em outro programa (Word/PDF). Feche-o e tente novamente."))
             except Exception as e:
                 import traceback
                 traceback.print_exc()
