@@ -47,6 +47,7 @@ class InfoMedida:
     expressao_dax: str
     formato: Optional[str] = None
     formato_dinamico: Optional[str] = None
+    descricao: Optional[str] = None
 
 
 @dataclass
@@ -71,6 +72,7 @@ class InfoTabela:
     nome: str
     esta_oculta: bool = False
     excluida_refresh: bool = False
+    descricao: Optional[str] = None
     colunas: List[InfoColuna] = field(default_factory=list)
     medidas: List[InfoMedida] = field(default_factory=list)
     colunas_calculadas: List[InfoColunaCalculada] = field(default_factory=list)
@@ -397,6 +399,10 @@ def parse_tmdl_table(caminho: str) -> Optional[InfoTabela]:
         # Excluída de refresh
         elif linha == 'excludeFromModelRefresh':
             tabela.excluida_refresh = True
+            
+        # Descrição da tabela
+        elif linha.startswith('description:'):
+            tabela.descricao = linha.split(':', 1)[1].strip().strip("'\"")
         
         # Coluna regular ou calculada
         elif linha.startswith('column '):
@@ -516,7 +522,7 @@ def parse_tmdl_table(caminho: str) -> Optional[InfoTabela]:
                             i += 1
                         if i < len(linhas):
                             proxima = linhas[i].strip()
-                            if proxima and not proxima.startswith(('formatString', 'lineageTag', 'annotation')):
+                            if proxima and not proxima.startswith(('formatString', 'lineageTag', 'annotation', 'description:', 'displayFolder:')):
                                 # A próxima linha é a expressão
                                 if proxima == '```' or proxima.startswith('```'):
                                     expressao, i = extrair_expressao_multilinhas(linhas, i)
@@ -530,7 +536,7 @@ def parse_tmdl_table(caminho: str) -> Optional[InfoTabela]:
                                         
                                         # Para se encontrar uma propriedade TMDL ou nova entidade
                                         if linha_strip and (
-                                            linha_strip.startswith(('formatString:', 'formatStringDefinition', 'lineageTag', 'annotation', 'changedProperty')) or
+                                            linha_strip.startswith(('formatString:', 'formatStringDefinition', 'lineageTag', 'annotation', 'changedProperty', 'description:', 'displayFolder:')) or
                                             linha_strip.startswith(('measure ', 'column ', 'hierarchy ', 'partition ', 'expression'))
                                         ):
                                             break
@@ -548,7 +554,7 @@ def parse_tmdl_table(caminho: str) -> Optional[InfoTabela]:
                     if i < len(linhas):
                         proxima = linhas[i].strip()
                         # Medida sem expressão (apenas declarada)
-                        if not proxima or proxima.startswith(('changedProperty', 'formatString', 'lineageTag', 'annotation',
+                        if not proxima or proxima.startswith(('changedProperty', 'formatString', 'lineageTag', 'annotation', 'description:', 'displayFolder:',
                                                               'measure ', 'column ', 'hierarchy ', 'partition ')):
                             pass  # expressão fica vazia
                         elif proxima.startswith('='):
@@ -567,11 +573,13 @@ def parse_tmdl_table(caminho: str) -> Optional[InfoTabela]:
                     linha_prop = linhas[i].strip()
                     
                     if not linha_prop.startswith(('formatString:', 'formatStringDefinition', 'lineageTag', 'annotation',
-                                                 'changedProperty')):
+                                                 'changedProperty', 'description:', 'displayFolder:')):
                         break
                     
                     if linha_prop.startswith('formatString:'):
                         medida.formato = linha_prop.split(':', 1)[1].strip()
+                    elif linha_prop.startswith('description:'):
+                        medida.descricao = linha_prop.split(':', 1)[1].strip().strip("'\"")
                     elif linha_prop.startswith('formatStringDefinition'):
                         # Formato dinâmico
                         if linha_prop.endswith('```'):
@@ -996,8 +1004,8 @@ class DocumentadorPBIP:
                         # Estrutura complexa: text -> expr -> Literal -> Value
                         try:
                             titulo = text_prop.get('expr', {}).get('Literal', {}).get('Value', None)
-                        except:
-                            pass
+                        except Exception as e:
+                            print(f"  [AVISO] Falha ao extrair título (expr.Literal.Value) do visual {visual_dir.name}: {e}")
                 
                 # Se não achou, tenta em objects.general
                 if not titulo:
@@ -1008,17 +1016,15 @@ class DocumentadorPBIP:
                             # A estrutura pode variar muito aqui, é uma tentativa genérica
                             props = general[0].get('properties', {})
                             titulo = props.get('title', None)
-                        except:
-                            pass
+                        except Exception as e:
+                            print(f"  [AVISO] Falha ao extrair título (objects.general) do visual {visual_dir.name}: {e}")
                 
                 # Limpa o título (remove aspas e sufixo D/L se houver)
                 if titulo:
+                    # Se tiver aspas no começo e letras no final (ex: 'Título'D), remove a letra primeiro
+                    if (titulo.endswith('D') or titulo.endswith('L')) and len(titulo) > 1 and titulo[-2] in ["'", '"']:
+                         titulo = titulo[:-1]
                     titulo = titulo.strip("'\"")
-                    if titulo.endswith('D') or titulo.endswith('L'): # Sufixos comuns em expressões literals
-                         # Verifica se é só sufixo numérico/literal ou parte do texto
-                         # Na verdade, literais de string em JSON do PBI geralmente são "'Texto'"
-                         # Se for expression, pode ter sufixo. Vamos assumir que se veio de Literal.Value é string pura ou com aspas
-                         pass
                 
                 pagina.visuais.append(InfoVisual(
                     tipo=tipo_visual,
@@ -1027,8 +1033,7 @@ class DocumentadorPBIP:
                 ))
             except Exception as e:
                 # Ignora visual se der erro no parse, mas loga
-                # print(f"Erro visual {visual_dir.name}: {e}")
-                pass
+                print(f"  [AVISO] Erro total no parse do visual {visual_dir.name}: {e}")
 
     def _extrair_info_report(self):
         """Extrai informações do relatório"""
@@ -1262,7 +1267,7 @@ class DocumentadorPBIP:
         try:
             with sync_playwright() as p:
                 browser = p.chromium.launch(headless=True)
-                page = browser.new_page(viewport={{"width": 1600, "height": 900}})
+                page = browser.new_page(viewport={"width": 1600, "height": 900})
                 page.set_content(html, wait_until="networkidle")
                 
                 # Aguarda o Mermaid renderizar (o SVG aparece dentro do #diagram)
@@ -1459,8 +1464,21 @@ class DocumentadorPBIP:
                 
                 md.append(f"")
         
+        # Grupos de Consulta
+        if self.info_modelo.grupos_consulta:
+            md.append(f"### 📂 Grupos de Consulta")
+            md.append(f"")
+            md.append(f"| Nome | Ordem |")
+            md.append(f"|------|-------|")
+            for g in sorted(self.info_modelo.grupos_consulta, key=lambda x: x['ordem']):
+                md.append(f"| {g['nome']} | {g['ordem']} |")
+            md.append(f"")
+        
         md.append(f"---")
         md.append(f"")
+        
+        # ========================================================================
+        # TABELAS DETALHADAS
         # ========================================================================
         # RESUMO DAS TABELAS
         # ========================================================================
@@ -1515,6 +1533,10 @@ class DocumentadorPBIP:
             
             md.append(f"### {idx}. {tabela.nome}")
             md.append(f"")
+            
+            if hasattr(tabela, 'descricao') and tabela.descricao:
+                md.append(f"*{tabela.descricao}*")
+                md.append(f"")
             
             # Card de metadados com badges
             status_badge = "🔴 Oculta" if tabela.esta_oculta else "🟢 Visível"
@@ -1608,6 +1630,11 @@ class DocumentadorPBIP:
                 for medida in tabela.medidas:
                     md.append(f"##### {medida.nome}")
                     md.append(f"")
+                    
+                    if hasattr(medida, 'descricao') and medida.descricao:
+                        md.append(f"*{medida.descricao}*")
+                        md.append(f"")
+                    
                     if medida.formato:
                         md.append(f"**Formato**: `{medida.formato}`")
                         md.append(f"")
@@ -2433,6 +2460,12 @@ class DocumentadorPBIP:
             
             doc.add_heading(f"{idx}. {tabela.nome}", level=2)
             
+            if hasattr(tabela, 'descricao') and tabela.descricao:
+                p_desc = doc.add_paragraph()
+                r_desc = p_desc.add_run(tabela.descricao)
+                r_desc.italic = True
+                r_desc.font.color.rgb = CINZA_LT
+            
             # Card de metadados
             status = "Visível" if not tabela.esta_oculta else "Oculta"
             refresh = "Sim" if not tabela.excluida_refresh else "Não"
@@ -2495,6 +2528,12 @@ class DocumentadorPBIP:
                     run.bold = True
                     run.font.size = Pt(10)
                     run.font.color.rgb = AZUL_PRI
+                    
+                    if hasattr(medida, 'descricao') and medida.descricao:
+                        p_desc_med = doc.add_paragraph()
+                        r_desc_med = p_desc_med.add_run(medida.descricao)
+                        r_desc_med.italic = True
+                        r_desc_med.font.color.rgb = CINZA_LT
                     
                     if medida.formato:
                         r_l = p.add_run("  |  Fmt: ")
