@@ -1267,7 +1267,8 @@ class DocumentadorPBIP:
         try:
             with sync_playwright() as p:
                 browser = p.chromium.launch(headless=True)
-                page = browser.new_page(viewport={"width": 1600, "height": 900})
+                # Configura a página com alta resolução (4K) e fator de escala maior para o PNG
+                page = browser.new_page(viewport={"width": 3840, "height": 2160}, device_scale_factor=3)
                 page.set_content(html, wait_until="networkidle")
                 
                 # Aguarda o Mermaid renderizar (o SVG aparece dentro do #diagram)
