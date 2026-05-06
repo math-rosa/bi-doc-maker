@@ -1247,6 +1247,10 @@ class DocumentadorPBIP:
                 body {{
                     margin: 0; padding: 40px;
                     background: white;
+                    display: inline-block;
+                }}
+                #diagram {{
+                    display: inline-block;
                 }}
             </style>
         </head>
