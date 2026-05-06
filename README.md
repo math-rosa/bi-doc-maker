@@ -5,12 +5,16 @@ Uma ferramenta simples e visual para gerar documentação automática (em format
 ## 🚀 Como começar (Para Leigos)
 
 ### 1. Pré-requisitos (O que você precisa instalar)
-Para rodar este aplicativo, você só precisa do **Python** instalado no seu computador.
+Para rodar este aplicativo, você precisa do **Python** instalado no seu computador.
 1. Acesse o site oficial do Python: [python.org/downloads](https://www.python.org/downloads/)
 2. Baixe a versão mais recente para Windows.
 3. **MUITO IMPORTANTE:** Durante a instalação do Python, **marque a caixa "Add Python.exe to PATH"** (Adicionar Python ao PATH) antes de clicar em Install.
 
-*Não é necessário instalar nenhum outro pacote ou dependência de terceiros! O programa usa apenas os recursos nativos.*
+*Para habilitar a exportação de PDF de alta qualidade (Estilo Typedown), abra o Prompt de Comando (CMD) e instale a dependência de PDF digitando:*
+```bash
+pip install python-docx playwright markdown
+python -m playwright install chromium
+```
 
 ### 2. Baixando o Projeto
 1. Clique no botão verde **Code** no topo desta página do GitHub e selecione **Download ZIP**.

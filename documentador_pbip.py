@@ -710,6 +710,7 @@ class DocumentadorPBIP:
         self.total_visuais = 0
         self.visuais_personalizados = []
         self.recursos_imagem = []
+        self._md_cache: Optional[str] = None
         
         # Layout do projeto: 'novo' (Model/, Report/) ou 'antigo' ({nome}.SemanticModel/definition/)
         self.layout = None
@@ -789,6 +790,7 @@ class DocumentadorPBIP:
     
     def extrair_informacoes(self):
         """Extrai todas as informações do projeto"""
+        self._md_cache = None  # Invalida cache ao re-extrair
         print("\nExtraindo informações do modelo semântico...")
         self._extrair_modelo()
         
@@ -1125,11 +1127,16 @@ class DocumentadorPBIP:
 
     def gerar_documentacao(self) -> str:
         """
-        Gera a documentação em Markdown
+        Gera a documentação em Markdown.
+        O resultado é cacheado internamente; chamadas subsequentes
+        retornam o cache até que extrair_informacoes() seja invocado novamente.
         
         Returns:
             String com o conteúdo Markdown
         """
+        if self._md_cache is not None:
+            return self._md_cache
+        
         md = []
         
         # Contadores para estatísticas
@@ -1140,9 +1147,11 @@ class DocumentadorPBIP:
         # ========================================================================
         # CABEÇALHO PRINCIPAL
         # ========================================================================
-        md.append(f"# 📊 Documentação do Modelo Power BI")
+        # Usamos uma tag HTML img para injetar a logo oficial do Power BI no título
+        pbi_logo = "<img src='https://upload.wikimedia.org/wikipedia/commons/c/cf/New_Power_BI_Logo.svg' width='36' height='36' style='vertical-align: bottom; margin-right: 8px;'/>"
+        md.append(f"# {pbi_logo} Documentação do Modelo Power BI")
         md.append(f"")
-        md.append(f"> **Projeto**: `{self.nome_projeto}`")
+        md.append(f"> **Projeto**: {self.nome_projeto}")
         md.append(f"> ")
         md.append(f"> **Gerado em**: {datetime.now().strftime('%d/%m/%Y às %H:%M')}")
         md.append(f"")
@@ -1154,9 +1163,9 @@ class DocumentadorPBIP:
         # ========================================================================
         md.append(f"## 📈 Visão Geral")
         md.append(f"")
-        md.append(f"| 📁 Tabelas | 📐 Medidas | 🔢 Colunas | 🧮 Calculadas | 🔗 Relacionamentos | 📄 Páginas | 📊 Visuais |")
-        md.append(f"|:----------:|:----------:|:----------:|:-------------:|:-----------------:|:----------:|:----------:|")
-        md.append(f"| **{len(self.tabelas)}** | **{total_medidas}** | **{total_colunas}** | **{total_calc}** | **{len(self.relacionamentos)}** | **{len(self.paginas)}** | **{self.total_visuais}** |")
+        md.append(f"| 📁 Tabelas | 📐 Medidas | 🔢 Colunas | 🧮 Calculadas | 🔗 Relacionamentos | 📄 Páginas |")
+        md.append(f"|:----------:|:----------:|:----------:|:-------------:|:-----------------:|:----------:|")
+        md.append(f"| **{len(self.tabelas)}** | **{total_medidas}** | **{total_colunas}** | **{total_calc}** | **{len(self.relacionamentos)}** | **{len(self.paginas)}** |")
         md.append(f"")
         md.append(f"---")
         md.append(f"")
@@ -1166,26 +1175,56 @@ class DocumentadorPBIP:
         # ========================================================================
         md.append(f"## 📑 Índice")
         md.append(f"")
-        md.append(f"1. [Visão Geral](#-visão-geral)")
-        md.append(f"2. [Modelo de Dados](#-modelo-de-dados)")
-        md.append(f"3. [Resumo das Tabelas](#-resumo-das-tabelas)")
-        md.append(f"4. [Detalhamento das Tabelas](#-detalhamento-das-tabelas)")
+        import unicodedata
+        import re
+        def gerar_slug(texto):
+            # Função para emular o slugify nativo do Python-Markdown
+            texto = unicodedata.normalize('NFKD', texto).encode('ascii', 'ignore').decode('ascii')
+            texto = re.sub(r'[^\w\s-]', '', texto).strip().lower()
+            return re.sub(r'[-\s]+', '-', texto)
+            
+        md.append(f"1. [Visão Geral](#visao-geral)")
+        md.append(f"2. [Páginas do Relatório](#paginas-do-relatorio)")
+        md.append(f"3. [Modelo de Dados](#modelo-de-dados)")
+        md.append(f"4. [Resumo das Tabelas](#resumo-das-tabelas)")
+        md.append(f"5. [Detalhamento das Tabelas](#detalhamento-das-tabelas)")
         
         # Lista de tabelas no índice
         for idx, tabela in enumerate(self.tabelas, 1):
-            nome_safe = tabela.nome.lower().replace(' ', '-').replace('_', '-')
-            md.append(f"   - {idx}. [{tabela.nome}](#{idx}-{nome_safe})")
+            slug = gerar_slug(f"{idx}. {tabela.nome}")
+            md.append(f"   - {idx}. [{tabela.nome}](#{slug})")
         
-        md.append(f"5. [Relacionamentos](#-relacionamentos)")
-        md.append(f"6. [Páginas do Relatório](#-páginas-do-relatório)")
+        md.append(f"6. [Relacionamentos](#relacionamentos)")
         
         if self.visuais_personalizados:
-            md.append(f"7. [Visuais Personalizados](#-visuais-personalizados)")
-        
-        md.append(f"8. [Detalhamento dos Visuais](#-detalhamento-dos-visuais)")
-        md.append(f"9. [Recursos de Imagem](#-recursos-de-imagem)")
+            md.append(f"7. [Visuais Personalizados](#visuais-personalizados)")
+            
+        md.append(f"8. [Recursos de Imagem](#recursos-de-imagem)")
         
         md.append(f"")
+        md.append(f"---")
+        md.append(f"")
+        
+        # ========================================================================
+        # PÁGINAS DO RELATÓRIO
+        # ========================================================================
+        md.append(f"## 📄 Páginas do Relatório")
+        md.append(f"")
+        md.append(f"**Total de páginas: {len(self.paginas)}**")
+        md.append(f"")
+        if self.paginas:
+            md.append(f"| # | Nome | Tipo | Dimensões |")
+            md.append(f"|---|------|------|-----------|")
+            
+            for i, pagina in enumerate(self.paginas, 1):
+                dimensoes = f"{pagina.largura} x {pagina.altura}"
+                md.append(f"| {i} | {pagina.nome_exibicao} | {pagina.tipo} | {dimensoes} |")
+            
+            md.append(f"")
+        else:
+            md.append(f"> ⚠️ Nenhuma página encontrada localmente. Este projeto pode ser um **relatório remoto** (thin report) onde as páginas ficam armazenadas no serviço Power BI.")            
+            md.append(f"")
+        
         md.append(f"---")
         md.append(f"")
         
@@ -1209,34 +1248,26 @@ class DocumentadorPBIP:
             md.append("")
         # Relacionamentos (Tabela)
         if self.relacionamentos:
-            md.append(f"")
-            md.append(f"### 🔗 Lista de Relacionamentos")
-            md.append(f"")
-            md.append(f"*Total: {len(self.relacionamentos)} relacionamentos*")
-            md.append(f"")
-            md.append(f"| Origem | → | Destino | Bidirecional | Ativo |")
-            md.append(f"|--------|---|---------|--------------|-------|")
+            # Filtra os relacionamentos válidos
+            rel_validos = [r for r in self.relacionamentos if not ('LocalDateTable' in r.tabela_destino or 'DateTableTemplate' in r.tabela_destino)]
             
-            for rel in self.relacionamentos:
-                origem = f"{rel.tabela_origem}.{rel.coluna_origem}"
-                destino = f"{rel.tabela_destino}.{rel.coluna_destino}"
-                bidirecional = "Sim" if rel.filtro_bidirecional else "Não"
-                ativo = "Sim" if rel.esta_ativo else "Não"
-                md.append(f"| {origem} | → | {destino} | {bidirecional} | {ativo} |")
-            
-            md.append(f"")
-        
-        # Grupos de Consulta
-        if self.info_modelo.grupos_consulta:
-            md.append(f"### Grupos de Consulta")
-            md.append(f"")
-            md.append(f"| Nome | Ordem |")
-            md.append(f"|:-----|:-----:|")
-            
-            for grupo in sorted(self.info_modelo.grupos_consulta, key=lambda x: x['ordem']):
-                md.append(f"| {grupo['nome']} | {grupo['ordem']} |")
-            
-            md.append(f"")
+            if rel_validos:
+                md.append(f"")
+                md.append(f"### 🔗 Lista de Relacionamentos")
+                md.append(f"")
+                md.append(f"*Total: {len(rel_validos)} relacionamentos*")
+                md.append(f"")
+                md.append(f"| Origem | → | Destino | Bidirecional | Ativo |")
+                md.append(f"|--------|---|---------|--------------|-------|")
+                
+                for rel in rel_validos:
+                    origem = f"{rel.tabela_origem}.{rel.coluna_origem}"
+                    destino = f"{rel.tabela_destino}.{rel.coluna_destino}"
+                    bidirecional = "Sim" if rel.filtro_bidirecional else "Não"
+                    ativo = "Sim" if rel.esta_ativo else "Não"
+                    md.append(f"| {origem} | → | {destino} | {bidirecional} | {ativo} |")
+                
+                md.append(f"")
         
         md.append(f"---")
         md.append(f"")
@@ -1432,45 +1463,7 @@ class DocumentadorPBIP:
                 md.append(f"```")
                 md.append(f"")
         
-        # Páginas do Relatório (sempre exibe, mesmo quando 0)
-        md.append(f"---")
-        md.append(f"")
-        md.append(f"## 📄 Páginas do Relatório")
-        md.append(f"")
-        md.append(f"**Total de páginas: {len(self.paginas)}**")
-        md.append(f"")
-        if self.paginas:
-            md.append(f"| # | Nome | Tipo | Dimensões |")
-            md.append(f"|---|------|------|-----------|")
-            
-            for i, pagina in enumerate(self.paginas, 1):
-                dimensoes = f"{pagina.largura} x {pagina.altura}"
-                md.append(f"| {i} | {pagina.nome_exibicao} | {pagina.tipo} | {dimensoes} |")
-            
-            md.append(f"")
-        else:
-            md.append(f"> ⚠️ Nenhuma página encontrada localmente. Este projeto pode ser um **relatório remoto** (thin report) onde as páginas ficam armazenadas no serviço Power BI.")            
-            md.append(f"")
-        
-        # Detalhamento dos Visuais (Página a Página)
-        md.append(f"---")
-        md.append(f"")
-        md.append(f"## 🎨 Detalhamento dos Visuais")
-        md.append(f"")
-        md.append(f"*Lista de visuais por página do relatório*")
-        md.append(f"")
-        
-        for pagina in self.paginas:
-            md.append(f"### {pagina.nome_exibicao}")
-            md.append(f"")
-            if pagina.visuais:
-                md.append(f"| Tipo | Título |")
-                md.append(f"|------|--------|")
-                for visual in pagina.visuais:
-                    md.append(f"| `{visual.tipo}` | {visual.titulo} |")
-            else:
-                md.append(f"*Nenhum visual detectado nesta página.*")
-            md.append(f"")
+
         
         # Visuais Personalizados
         if self.visuais_personalizados:
@@ -1500,7 +1493,8 @@ class DocumentadorPBIP:
             
             md.append(f"")
         
-        return '\n'.join(md)
+        self._md_cache = '\n'.join(md)
+        return self._md_cache
     
     def salvar_documentacao(self, caminho_saida: Optional[str] = None):
         """
@@ -1520,6 +1514,129 @@ class DocumentadorPBIP:
         print(f"[OK] Documentação MD salva em: {caminho_saida}")
         return caminho_saida
     
+    def salvar_documentacao_pdf(self, caminho_saida: Optional[str] = None):
+        """
+        Salva a documentação em formato PDF com renderização premium via Playwright.
+        
+        Args:
+            caminho_saida: Caminho para salvar. Se None, salva na pasta do projeto
+        """
+        try:
+            import markdown
+            from playwright.sync_api import sync_playwright
+        except ImportError:
+            raise ImportError("O Playwright não está instalado. Feche o app, abra o terminal e digite: pip install playwright markdown && python -m playwright install chromium")
+            
+        if caminho_saida is None:
+            caminho_saida = self.caminho_projeto / f"{self.nome_projeto}_documentacao.pdf"
+            
+        markdown_text = self.gerar_documentacao()
+        
+        # Converter Markdown para HTML
+        # extensions=['tables', 'fenced_code', 'toc'] são cruciais para tabelas, códigos e IDs dos títulos
+        html_body = markdown.markdown(markdown_text, extensions=['tables', 'fenced_code', 'toc'])
+        
+        # Injeção de CSS para imitar a estética premium (estilo Typedown) com correções de quebra
+        css_style = """
+        html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+        body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; color: #2C3E50; line-height: 1.6; padding: 20px 40px; font-size: 10.5pt; }
+        h1, h2, h3, h4, h5 { color: #1A5276; font-weight: 600; margin-top: 1.5em; margin-bottom: 0.5em; page-break-after: avoid; }
+        h1 { border-bottom: 2px solid #2980B9; padding-bottom: 0.3em; font-size: 24pt; }
+        h2 { border-bottom: 1px solid #EAECEE; padding-bottom: 0.3em; font-size: 18pt; }
+        h3 { font-size: 14pt; color: #2980B9; }
+        table { border-collapse: collapse; width: 100%; margin: 1.5em 0; font-size: 9.5pt; box-shadow: 0 1px 3px rgba(0,0,0,0.1); table-layout: auto; word-break: break-word; }
+        th { background-color: #2980B9; color: white; padding: 10px 12px; text-align: left; font-weight: 600; }
+        td { border-bottom: 1px solid #EAECEE; padding: 10px 12px; }
+        tr:nth-child(even) { background-color: #F8F9F9; }
+        tr { page-break-inside: avoid; }
+        code { font-family: 'Consolas', 'Courier New', monospace; background-color: #F2F4F4; padding: 2px 5px; border-radius: 4px; font-size: 9pt; color: #C0392B; word-break: break-all; }
+        pre code { display: block; padding: 15px; border-left: 4px solid #2980B9; overflow-x: auto; line-height: 1.4; white-space: pre-wrap; word-wrap: break-word; border-radius: 0 6px 6px 0; }
+        blockquote { border-left: 4px solid #3498DB; background: #EBF5FB; padding: 12px 16px; margin: 1.5em 0; color: #2C3E50; border-radius: 0 4px 4px 0; }
+        hr { border: 0; height: 1px; background: #EAECEE; margin: 2em 0; }
+        
+        /* Sobrescrever estilos do highlight.js para manter a borda lateral azul */
+        pre code.hljs { border-left: 4px solid #2980B9; border-radius: 0 6px 6px 0; }
+        
+        /* Inline code (dentro de parágrafos e tabelas) NÃO deve ter o tema escuro */
+        :not(pre) > code { background-color: #F2F4F4 !important; color: #C0392B !important; padding: 2px 5px; border-radius: 4px; font-size: 9pt; }
+        
+        /* Ajustes específicos para códigos largos e diagramas para não estourar a tela */
+        .language-mermaid { white-space: pre-wrap; word-wrap: break-word; font-family: 'Consolas', monospace; }
+        .mermaid { display: flex; justify-content: center; margin: 2em 0; }
+        """
+        
+        full_html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <!-- Highlight.js - Syntax Highlighting para DAX e Power Query -->
+            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-light.min.css">
+            <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+            <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/sql.min.js"></script>
+            <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/powershell.min.js"></script>
+            <style>{css_style}</style>
+            <script type="module">
+                // === MermaidJS para transformar o diagrama em gráficos reais ===
+                import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+                mermaid.initialize({{ startOnLoad: true, theme: 'default' }});
+                
+                document.addEventListener("DOMContentLoaded", () => {{
+                    // O pacote markdown gera <code class="language-mermaid">
+                    // O Mermaid precisa que seja uma div de classe "mermaid"
+                    document.querySelectorAll("code.language-mermaid").forEach(el => {{
+                        const div = document.createElement("div");
+                        div.className = "mermaid";
+                        div.textContent = el.textContent;
+                        if (el.parentNode.tagName === 'PRE') {{
+                            el.parentNode.replaceWith(div);
+                        }}
+                    }});
+                    
+                    // === Syntax Highlighting para DAX e Power Query ===
+                    // Mapear language-dax para SQL (sintaxe mais próxima disponível)
+                    document.querySelectorAll("code.language-dax").forEach(el => {{
+                        el.classList.remove("language-dax");
+                        el.classList.add("language-sql");
+                    }});
+                    // Mapear language-powerquery para PowerShell (sintaxe similar com let/in)
+                    document.querySelectorAll("code.language-powerquery").forEach(el => {{
+                        el.classList.remove("language-powerquery");
+                        el.classList.add("language-powershell");
+                    }});
+                    
+                    // Executar o highlight em todos os blocos de código restantes
+                    hljs.highlightAll();
+                }});
+            </script>
+        </head>
+        <body>
+            {html_body}
+        </body>
+        </html>
+        """
+        
+        try:
+            with sync_playwright() as p:
+                browser = p.chromium.launch(headless=True)
+                page = browser.new_page()
+                # O networkidle garante que os scripts (como MermaidJS) terminem de carregar e renderizar
+                page.set_content(full_html, wait_until="networkidle")
+                
+                page.pdf(
+                    path=str(caminho_saida),
+                    format="A4",
+                    print_background=True,
+                    margin={"top": "1cm", "right": "1cm", "bottom": "1cm", "left": "1cm"}
+                )
+                browser.close()
+            
+            print(f"[OK] Documentação PDF salva em: {caminho_saida}")
+            return caminho_saida
+        except Exception as e:
+            print(f"[ERRO] Falha ao gerar PDF via Playwright: {e}")
+            raise e
+
     def salvar_documentacao_docx(self, caminho_saida: Optional[str] = None):
         """
         Salva a documentação em formato Word (.docx) com formatação profissional

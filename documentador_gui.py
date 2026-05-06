@@ -481,6 +481,14 @@ class DocumentadorGUI:
                 caminho_saida_docx = str(Path(pasta_raiz) / nome_arquivo_docx)
                 doc.salvar_documentacao_docx(caminho_saida_docx)
                 
+                # Salva o .pdf na pasta raiz, com o nome do projeto
+                nome_arquivo_pdf = f"{doc.nome_projeto}_documentacao.pdf"
+                caminho_saida_pdf = str(Path(pasta_raiz) / nome_arquivo_pdf)
+                resultado_pdf = doc.salvar_documentacao_pdf(caminho_saida_pdf)
+                
+                if resultado_pdf is None:
+                    raise Exception("O Playwright falhou. Feche o app, abra o terminal e digite: pip install playwright markdown && python -m playwright install chromium")
+                
                 resultados_sucesso.append(nome_pasta)
                 pastas_saida.add(pasta_raiz)
                 
