@@ -1247,18 +1247,16 @@ class DocumentadorPBIP:
                 body {{
                     margin: 0; padding: 40px;
                     background: white;
-                    display: flex; justify-content: center;
                 }}
-                #diagram {{ max-width: 100%; }}
             </style>
         </head>
         <body>
-            <pre class="mermaid" id="diagram">
+            <div class="mermaid" id="diagram">
 {codigo_mermaid}
-            </pre>
+            </div>
             <script type="module">
                 import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
-                mermaid.initialize({{ startOnLoad: true, theme: 'default', er: {{ useMaxWidth: true }} }});
+                mermaid.initialize({{ startOnLoad: true, theme: 'default', er: {{ useMaxWidth: false }} }});
             </script>
         </body>
         </html>
