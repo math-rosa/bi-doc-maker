@@ -711,6 +711,7 @@ class DocumentadorPBIP:
         self.visuais_personalizados = []
         self.recursos_imagem = []
         self._md_cache: Optional[str] = None
+        self._caminho_diagrama_png: Optional[str] = None
         
         # Layout do projeto: 'novo' (Model/, Report/) ou 'antigo' ({nome}.SemanticModel/definition/)
         self.layout = None
@@ -1206,6 +1207,87 @@ class DocumentadorPBIP:
             mermaid.append("    " + tabela_origem + " " + tipo_rel + " " + tabela_destino + ' : "' + coluna_origem + '"')
         
         return "\n".join(mermaid)
+
+    def exportar_diagrama_png(self, caminho_saida: Optional[str] = None) -> Optional[str]:
+        """
+        Renderiza o diagrama ER Mermaid como imagem PNG usando Playwright.
+        
+        Args:
+            caminho_saida: Caminho para salvar o PNG. Se None, salva na pasta do projeto.
+        
+        Returns:
+            Caminho do PNG gerado ou None se falhar.
+        """
+        if not self.tabelas and not self.relacionamentos:
+            return None
+        
+        try:
+            from playwright.sync_api import sync_playwright
+        except ImportError:
+            print("[AVISO] Playwright não instalado — diagrama PNG não será gerado.")
+            return None
+        
+        if caminho_saida is None:
+            caminho_saida = str(self.caminho_projeto / f"{self.nome_projeto}_diagrama_er.png")
+        
+        codigo_mermaid = self._gerar_codigo_mermaid()
+        
+        # HTML mínimo que carrega o Mermaid e renderiza o diagrama
+        html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <style>
+                body {{
+                    margin: 0; padding: 40px;
+                    background: white;
+                    display: flex; justify-content: center;
+                }}
+                #diagram {{ max-width: 100%; }}
+            </style>
+        </head>
+        <body>
+            <pre class="mermaid" id="diagram">
+{codigo_mermaid}
+            </pre>
+            <script type="module">
+                import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+                mermaid.initialize({{ startOnLoad: true, theme: 'default', er: {{ useMaxWidth: true }} }});
+            </script>
+        </body>
+        </html>
+        """
+        
+        try:
+            with sync_playwright() as p:
+                browser = p.chromium.launch(headless=True)
+                page = browser.new_page(viewport={{"width": 1600, "height": 900}})
+                page.set_content(html, wait_until="networkidle")
+                
+                # Aguarda o Mermaid renderizar (o SVG aparece dentro do #diagram)
+                page.wait_for_selector("#diagram svg", timeout=15000)
+                
+                # Espera um pouco extra para garantir render completo
+                page.wait_for_timeout(1000)
+                
+                # Captura apenas o elemento do diagrama para PNG limpo
+                elemento = page.query_selector("#diagram")
+                if elemento:
+                    elemento.screenshot(path=caminho_saida, type="png")
+                else:
+                    # Fallback: captura a página inteira
+                    page.screenshot(path=caminho_saida, full_page=True, type="png")
+                
+                browser.close()
+            
+            self._caminho_diagrama_png = caminho_saida
+            print(f"[OK] Diagrama ER PNG salvo em: {caminho_saida}")
+            return caminho_saida
+        
+        except Exception as e:
+            print(f"[AVISO] Falha ao gerar diagrama PNG: {e}")
+            return None
 
     def gerar_documentacao(self) -> str:
         """
@@ -1775,6 +1857,12 @@ class DocumentadorPBIP:
         
         if caminho_saida is None:
             caminho_saida = self.caminho_projeto / f"{self.nome_projeto}_documentacao.docx"
+            
+        # Gera a imagem PNG do diagrama antes de montar o documento
+        # Salva na mesma pasta do arquivo DOCX de saída
+        if not self._caminho_diagrama_png:
+            caminho_img = str(Path(caminho_saida).parent / f"{self.nome_projeto}_diagrama_er.png")
+            self.exportar_diagrama_png(caminho_saida=caminho_img)
         
         doc = Document()
         
@@ -2240,8 +2328,24 @@ class DocumentadorPBIP:
         # Diagrama ER (Mermaid)
         if self.tabelas or self.relacionamentos:
             doc.add_heading("Diagrama de Relacionamentos (ER)", level=2)
-            _add_info_box("Diagrama Mermaid gerado automaticamente. Copie o bloco de código abaixo e cole em um visualizador online (como o mermaid.live) para ver o relacionamento entre as tabelas.", "info")
-            _add_code_block(self._gerar_codigo_mermaid(), "MERMAID")
+            
+            # Tenta inserir a imagem PNG do diagrama
+            if self._caminho_diagrama_png and os.path.isfile(self._caminho_diagrama_png):
+                try:
+                    p_img = doc.add_paragraph()
+                    p_img.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                    p_img.paragraph_format.space_before = Pt(8)
+                    p_img.paragraph_format.space_after = Pt(8)
+                    run_img = p_img.add_run()
+                    # Largura máxima de 16cm para caber na página A4 com margens
+                    run_img.add_picture(self._caminho_diagrama_png, width=Cm(16))
+                except Exception as e:
+                    print(f"  [AVISO] Falha ao inserir imagem do diagrama no DOCX: {e}")
+                    _add_info_box("Diagrama Mermaid gerado automaticamente. Copie o bloco de código abaixo e cole em um visualizador online (como o mermaid.live) para ver o relacionamento entre as tabelas.", "info")
+                    _add_code_block(self._gerar_codigo_mermaid(), "MERMAID")
+            else:
+                _add_info_box("Diagrama Mermaid gerado automaticamente. Copie o bloco de código abaixo e cole em um visualizador online (como o mermaid.live) para ver o relacionamento entre as tabelas.", "info")
+                _add_code_block(self._gerar_codigo_mermaid(), "MERMAID")
             
         # Lista de Relacionamentos (exclui tabelas técnicas de calendário, igual ao Markdown)
         TABELAS_TECNICAS = ('LocalDateTable_', 'DateTableTemplate_')
