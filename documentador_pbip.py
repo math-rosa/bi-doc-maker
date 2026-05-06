@@ -2126,17 +2126,23 @@ class DocumentadorPBIP:
             _add_info_box("Diagrama Mermaid gerado automaticamente. Copie o bloco de código abaixo e cole em um visualizador online (como o mermaid.live) para ver o relacionamento entre as tabelas.", "info")
             _add_code_block(self._gerar_codigo_mermaid(), "MERMAID")
             
-        # Lista de Relacionamentos
-        if self.relacionamentos:
+        # Lista de Relacionamentos (exclui tabelas técnicas de calendário, igual ao Markdown)
+        TABELAS_TECNICAS = ('LocalDateTable_', 'DateTableTemplate_')
+        rel_validos_docx = [
+            r for r in self.relacionamentos
+            if not r.tabela_destino.startswith(TABELAS_TECNICAS)
+            and not r.tabela_origem.startswith(TABELAS_TECNICAS)
+        ]
+        if rel_validos_docx:
             doc.add_heading("Lista de Relacionamentos", level=2)
             
             _add_info_box(
-                f"O modelo possui {len(self.relacionamentos)} relacionamentos entre tabelas.",
+                f"O modelo possui {len(rel_validos_docx)} relacionamentos entre tabelas.",
                 "info"
             )
             
             rows_rel = []
-            for rel in self.relacionamentos:
+            for rel in rel_validos_docx:
                 origem = f"{rel.tabela_origem}.{rel.coluna_origem}"
                 destino = f"{rel.tabela_destino}.{rel.coluna_destino}"
                 bidi = "Sim" if rel.filtro_bidirecional else "Não"
