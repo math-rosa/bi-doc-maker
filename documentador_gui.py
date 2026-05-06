@@ -472,7 +472,7 @@ class DocumentadorGUI:
             self.label_status.config(fg=self.cor_aviso)
             return
         
-        self.btn_gerar.config(state=tk.DISABLED)
+        self.btn_gerar.config(state=tk.DISABLED, text="⏳ Processando...")
         
         # Mostra e inicia barra de progresso
         self.progress.pack(pady=(0, 8), before=self.label_status)
@@ -505,10 +505,13 @@ class DocumentadorGUI:
         for i, caminho in enumerate(caminhos, 1):
             nome_pasta = Path(caminho).name
             
-            self.root.after(0, lambda idx=i, nome=nome_pasta: (
-                self.status_texto.set(f"Processando {idx} de {total}: {nome}..."),
-                self.label_status.config(fg=self.cor_destaque)
-            ))
+            def update_status(msg):
+                self.root.after(0, lambda m=msg: (
+                    self.status_texto.set(m),
+                    self.label_status.config(fg=self.cor_destaque)
+                ))
+
+            update_status(f"[{nome_pasta}] Iniciando (1/4): Extraindo dados do Power BI...")
             
             try:
                 doc = DocumentadorPBIP(caminho)
@@ -516,16 +519,19 @@ class DocumentadorGUI:
                 
                 # Gera apenas os formatos selecionados
                 if formato in ('md', 'todos'):
+                    update_status(f"[{nome_pasta}] Processando (2/4): Gerando Markdown...")
                     nome_arquivo_md = f"{doc.nome_projeto}_documentacao.md"
                     caminho_saida_md = str(Path(pasta_raiz) / nome_arquivo_md)
                     doc.salvar_documentacao(caminho_saida_md)
                 
                 if formato in ('docx', 'todos'):
+                    update_status(f"[{nome_pasta}] Processando (3/4): Construindo Word (gerando imagem ER)...")
                     nome_arquivo_docx = f"{doc.nome_projeto}_documentacao.docx"
                     caminho_saida_docx = str(Path(pasta_raiz) / nome_arquivo_docx)
                     doc.salvar_documentacao_docx(caminho_saida_docx)
                 
                 if formato in ('pdf', 'todos'):
+                    update_status(f"[{nome_pasta}] Processando (4/4): Exportando PDF via Playwright (pode demorar)...")
                     nome_arquivo_pdf = f"{doc.nome_projeto}_documentacao.pdf"
                     caminho_saida_pdf = str(Path(pasta_raiz) / nome_arquivo_pdf)
                     resultado_pdf = doc.salvar_documentacao_pdf(caminho_saida_pdf)
@@ -547,7 +553,7 @@ class DocumentadorGUI:
         """Atualiza a UI com o resultado final"""
         self.progress.stop()
         self.progress.pack_forget()
-        self.btn_gerar.config(state=tk.NORMAL)
+        self.btn_gerar.config(state=tk.NORMAL, text="📄  Documentar Projetos Selecionados")
         
         total = len(sucessos) + len(erros)
         
