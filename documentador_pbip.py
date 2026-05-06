@@ -1081,6 +1081,88 @@ class DocumentadorPBIP:
             codigo = '\n'.join(linhas)
         return codigo.strip()
     
+    def _interpretar_filtros_pagina(self, filtros: List[Dict]) -> List[Dict]:
+        """
+        Interpreta a estrutura JSON de filtros de página do Power BI
+        e retorna uma lista simplificada: [{tabela, coluna, tipo, valores}]
+        """
+        resultado = []
+        if not filtros or not isinstance(filtros, list):
+            return resultado
+        
+        for filtro_raw in filtros:
+            try:
+                # filtro_raw pode ser string JSON ou dict
+                if isinstance(filtro_raw, str):
+                    import json
+                    filtro_raw = json.loads(filtro_raw)
+                
+                if not isinstance(filtro_raw, dict):
+                    continue
+                
+                tipo_filtro = filtro_raw.get('type', 'Unknown')
+                filtro = filtro_raw.get('filter', filtro_raw)
+                
+                tabela = ''
+                coluna = ''
+                valores = []
+                
+                # Tenta extrair tabela/coluna de múltiplas estruturas possíveis
+                # Estrutura "From" (filtros básicos)
+                from_list = filtro.get('From', [])
+                if from_list and isinstance(from_list, list):
+                    tabela = from_list[0].get('Entity', from_list[0].get('Name', ''))
+                
+                # Estrutura "Column" (filtros avançados)
+                col_obj = filtro.get('Column', {})
+                if col_obj:
+                    coluna = col_obj.get('Property', '')
+                    src_ref = col_obj.get('Expression', {}).get('SourceRef', {})
+                    if src_ref and not tabela:
+                        tabela = src_ref.get('Entity', src_ref.get('Source', ''))
+                
+                # Estrutura "Where" para extrair valores
+                where = filtro.get('Where', [])
+                if where and isinstance(where, list):
+                    for cond_wrapper in where:
+                        cond = cond_wrapper.get('Condition', {})
+                        # Comparação simples
+                        comp = cond.get('Comparison', {})
+                        if comp:
+                            right = comp.get('Right', {}).get('Literal', {}).get('Value', '')
+                            if right:
+                                valores.append(str(right).strip("'"))
+                        # In list
+                        in_list = cond.get('In', {}).get('Values', [])
+                        if in_list:
+                            for v_list in in_list:
+                                if isinstance(v_list, list):
+                                    for v in v_list:
+                                        lit = v.get('Literal', {}).get('Value', '')
+                                        if lit:
+                                            valores.append(str(lit).strip("'"))
+                                elif isinstance(v_list, dict):
+                                    lit = v_list.get('Literal', {}).get('Value', '')
+                                    if lit:
+                                        valores.append(str(lit).strip("'"))
+                        # Not condition
+                        not_cond = cond.get('Not', {})
+                        if not_cond:
+                            tipo_filtro = 'Exclusion'
+                
+                # Se conseguiu extrair algo útil, adiciona
+                if tabela or coluna:
+                    resultado.append({
+                        'tabela': tabela,
+                        'coluna': coluna,
+                        'tipo': tipo_filtro,
+                        'valores': valores
+                    })
+            except Exception:
+                continue
+        
+        return resultado
+
     def _gerar_codigo_mermaid(self) -> str:
         """Gera o código do diagrama ER em formato Mermaid"""
         mermaid = ["erDiagram"]
@@ -1213,14 +1295,40 @@ class DocumentadorPBIP:
         md.append(f"**Total de páginas: {len(self.paginas)}**")
         md.append(f"")
         if self.paginas:
-            md.append(f"| # | Nome | Tipo | Dimensões |")
-            md.append(f"|---|------|------|-----------|")
+            md.append(f"| # | Nome | Tipo | Dimensões | Filtros |")
+            md.append(f"|---|------|------|-----------|---------|")
             
             for i, pagina in enumerate(self.paginas, 1):
                 dimensoes = f"{pagina.largura} x {pagina.altura}"
-                md.append(f"| {i} | {pagina.nome_exibicao} | {pagina.tipo} | {dimensoes} |")
+                filtros_interpretados = self._interpretar_filtros_pagina(pagina.filtros) if pagina.filtros else []
+                qtd_filtros = len(filtros_interpretados)
+                filtro_badge = f"{qtd_filtros}" if qtd_filtros > 0 else "-"
+                md.append(f"| {i} | {pagina.nome_exibicao} | {pagina.tipo} | {dimensoes} | {filtro_badge} |")
             
             md.append(f"")
+            
+            # Detalhamento dos filtros de página
+            paginas_com_filtros = [
+                (p, self._interpretar_filtros_pagina(p.filtros))
+                for p in self.paginas if p.filtros
+            ]
+            paginas_com_filtros = [(p, f) for p, f in paginas_com_filtros if f]
+            
+            if paginas_com_filtros:
+                md.append(f"### 🔍 Filtros de Página")
+                md.append(f"")
+                
+                for pagina, filtros in paginas_com_filtros:
+                    md.append(f"**{pagina.nome_exibicao}**")
+                    md.append(f"")
+                    md.append(f"| Tabela | Coluna | Tipo | Valores |")
+                    md.append(f"|--------|--------|------|---------|")
+                    
+                    for f in filtros:
+                        valores_str = ', '.join(f['valores']) if f['valores'] else '-'
+                        md.append(f"| {f['tabela']} | {f['coluna']} | {f['tipo']} | {valores_str} |")
+                    
+                    md.append(f"")
         else:
             md.append(f"> ⚠️ Nenhuma página encontrada localmente. Este projeto pode ser um **relatório remoto** (thin report) onde as páginas ficam armazenadas no serviço Power BI.")            
             md.append(f"")
@@ -1429,6 +1537,15 @@ class DocumentadorPBIP:
                         md.append("// [AVISO] Expressão DAX não capturada durante o parsing")
                     md.append(f"```")
                     md.append(f"")
+                    
+                    # Formato dinâmico (se existir)
+                    if medida.formato_dinamico and str(medida.formato_dinamico).strip():
+                        md.append(f"**Formato Dinâmico** (expressão DAX que controla a máscara de exibição):")
+                        md.append(f"")
+                        md.append(f"```dax")
+                        md.append(str(medida.formato_dinamico).strip())
+                        md.append(f"```")
+                        md.append(f"")
                 
                 md.append(f"")
             
@@ -2286,6 +2403,17 @@ class DocumentadorPBIP:
                     
                     expr = medida.expressao_dax.strip() if medida.expressao_dax else "// Expressão não capturada"
                     _add_code_block(expr, "DAX")
+                    
+                    # Formato dinâmico (se existir)
+                    if medida.formato_dinamico and str(medida.formato_dinamico).strip():
+                        p_fd = doc.add_paragraph()
+                        p_fd.paragraph_format.space_before = Pt(2)
+                        p_fd.paragraph_format.space_after = Pt(2)
+                        run_fd = p_fd.add_run("Formato Dinâmico:")
+                        run_fd.bold = True
+                        run_fd.font.size = Pt(8)
+                        run_fd.font.color.rgb = CINZA_LT
+                        _add_code_block(str(medida.formato_dinamico).strip(), "DAX")
             
             # Hierarquias
             if tabela.hierarquias:
@@ -2333,8 +2461,35 @@ class DocumentadorPBIP:
             rows_pag = []
             for i, pagina in enumerate(self.paginas, 1):
                 dimensoes = f"{pagina.largura} × {pagina.altura}"
-                rows_pag.append([str(i), pagina.nome_exibicao, pagina.tipo, dimensoes])
-            _add_table(["#", "Nome da Página", "Tipo", "Dimensões"], rows_pag)
+                filtros_interpretados = self._interpretar_filtros_pagina(pagina.filtros) if pagina.filtros else []
+                qtd = str(len(filtros_interpretados)) if filtros_interpretados else "—"
+                rows_pag.append([str(i), pagina.nome_exibicao, pagina.tipo, dimensoes, qtd])
+            _add_table(["#", "Nome da Página", "Tipo", "Dimensões", "Filtros"], rows_pag)
+            
+            # Detalhamento dos filtros por página
+            paginas_com_filtros = [
+                (p, self._interpretar_filtros_pagina(p.filtros))
+                for p in self.paginas if p.filtros
+            ]
+            paginas_com_filtros = [(p, f) for p, f in paginas_com_filtros if f]
+            
+            if paginas_com_filtros:
+                doc.add_heading("Filtros de Página", level=2)
+                
+                for pagina, filtros in paginas_com_filtros:
+                    p_nome = doc.add_paragraph()
+                    p_nome.paragraph_format.space_before = Pt(8)
+                    p_nome.paragraph_format.space_after = Pt(4)
+                    run = p_nome.add_run(f"▸ {pagina.nome_exibicao}")
+                    run.bold = True
+                    run.font.size = Pt(10)
+                    run.font.color.rgb = AZUL_PRI
+                    
+                    rows_filt = []
+                    for f in filtros:
+                        valores_str = ', '.join(f['valores']) if f['valores'] else '—'
+                        rows_filt.append([f['tabela'], f['coluna'], f['tipo'], valores_str])
+                    _add_table(["Tabela", "Coluna", "Tipo", "Valores"], rows_filt, compact=True)
         else:
             _add_info_box(
                 "Nenhuma página encontrada localmente. Este projeto pode ser um "
