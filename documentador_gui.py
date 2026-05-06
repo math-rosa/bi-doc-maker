@@ -28,7 +28,7 @@ class DocumentadorGUI:
     def __init__(self):
         self.root = tk.Tk()
         self.root.title("Documentador Power BI")
-        self.root.geometry("850x700")
+        self.root.geometry("850x800")
         
         # Não permite redimensionar para manter o design consistente
         self.root.resizable(False, False)
@@ -55,6 +55,7 @@ class DocumentadorGUI:
         self.status_texto = tk.StringVar(value="Selecione uma pasta raiz contendo projetos Power BI...")
         self.contador_texto = tk.StringVar(value="Nenhum projeto encontrado")
         self.caminho_raiz = tk.StringVar(value="")
+        self.formato_saida = tk.StringVar(value="pdf")  # pdf | md | docx | todos
         
         self._criar_interface()
         self._centralizar_janela()
@@ -233,6 +234,47 @@ class DocumentadorGUI:
         )
         self.label_contador.pack(side=tk.RIGHT)
         
+        # --- FORMATO DE SAÍDA ---
+        tk.Label(
+            main_frame, text="Formato de Saída",
+            font=("Segoe UI", 11, "bold"),
+            bg=self.cor_fundo, fg=self.cor_texto, anchor="w"
+        ).pack(fill=tk.X, pady=(0, 5))
+        
+        formato_frame = tk.Frame(main_frame, bg=self.cor_container, padx=15, pady=12)
+        formato_frame.pack(fill=tk.X, pady=(0, 20))
+        
+        opcoes_formato = [
+            ("pdf",   "📄 PDF",      "Recomendado"),
+            ("md",    "📝 Markdown", None),
+            ("docx",  "📘 Word",     None),
+            ("todos", "📦 Todos",    None),
+        ]
+        
+        for valor, label, badge in opcoes_formato:
+            rb_frame = tk.Frame(formato_frame, bg=self.cor_container)
+            rb_frame.pack(side=tk.LEFT, padx=(0, 20))
+            
+            rb = tk.Radiobutton(
+                rb_frame, text=label, variable=self.formato_saida, value=valor,
+                font=("Segoe UI", 10),
+                bg=self.cor_container, fg=self.cor_texto,
+                selectcolor=self.cor_input_bg,
+                activebackground=self.cor_container,
+                activeforeground=self.cor_destaque,
+                indicatoron=True, cursor="hand2"
+            )
+            rb.pack(side=tk.LEFT)
+            
+            if badge:
+                badge_label = tk.Label(
+                    rb_frame, text=badge,
+                    font=("Segoe UI", 7, "bold"),
+                    bg=self.cor_sucesso, fg=self.cor_fundo,
+                    padx=5, pady=1
+                )
+                badge_label.pack(side=tk.LEFT, padx=(4, 0))
+        
         # --- ÁREA DE AÇÃO ---
         action_frame = tk.Frame(main_frame, bg=self.cor_fundo)
         # pack movido para o final
@@ -279,7 +321,7 @@ class DocumentadorGUI:
         
         # Rodapé
         tk.Label(
-            main_frame, text="v2.0 | Suporte a múltiplas pastas",
+            main_frame, text="v2.1 | Suporte a múltiplas pastas e formatos",
             font=("Segoe UI", 8), fg="#585b70", bg=self.cor_fundo
         ).pack(side=tk.BOTTOM)
         
@@ -456,8 +498,9 @@ class DocumentadorGUI:
         resultados_erro = []
         pastas_saida = set()
         
-        # Pasta raiz selecionada pelo usuário — é onde os .md serão salvos
+        # Pasta raiz selecionada pelo usuário — é onde os arquivos serão salvos
         pasta_raiz = self.caminho_raiz.get()
+        formato = self.formato_saida.get()
         
         for i, caminho in enumerate(caminhos, 1):
             nome_pasta = Path(caminho).name
@@ -471,23 +514,24 @@ class DocumentadorGUI:
                 doc = DocumentadorPBIP(caminho)
                 doc.extrair_informacoes()
                 
-                # Salva o .md na pasta raiz, com o nome do projeto
-                nome_arquivo_md = f"{doc.nome_projeto}_documentacao.md"
-                caminho_saida_md = str(Path(pasta_raiz) / nome_arquivo_md)
-                doc.salvar_documentacao(caminho_saida_md)
+                # Gera apenas os formatos selecionados
+                if formato in ('md', 'todos'):
+                    nome_arquivo_md = f"{doc.nome_projeto}_documentacao.md"
+                    caminho_saida_md = str(Path(pasta_raiz) / nome_arquivo_md)
+                    doc.salvar_documentacao(caminho_saida_md)
                 
-                # Salva o .docx na pasta raiz, com o nome do projeto
-                nome_arquivo_docx = f"{doc.nome_projeto}_documentacao.docx"
-                caminho_saida_docx = str(Path(pasta_raiz) / nome_arquivo_docx)
-                doc.salvar_documentacao_docx(caminho_saida_docx)
+                if formato in ('docx', 'todos'):
+                    nome_arquivo_docx = f"{doc.nome_projeto}_documentacao.docx"
+                    caminho_saida_docx = str(Path(pasta_raiz) / nome_arquivo_docx)
+                    doc.salvar_documentacao_docx(caminho_saida_docx)
                 
-                # Salva o .pdf na pasta raiz, com o nome do projeto
-                nome_arquivo_pdf = f"{doc.nome_projeto}_documentacao.pdf"
-                caminho_saida_pdf = str(Path(pasta_raiz) / nome_arquivo_pdf)
-                resultado_pdf = doc.salvar_documentacao_pdf(caminho_saida_pdf)
-                
-                if resultado_pdf is None:
-                    raise Exception("O Playwright falhou. Feche o app, abra o terminal e digite: pip install playwright markdown && python -m playwright install chromium")
+                if formato in ('pdf', 'todos'):
+                    nome_arquivo_pdf = f"{doc.nome_projeto}_documentacao.pdf"
+                    caminho_saida_pdf = str(Path(pasta_raiz) / nome_arquivo_pdf)
+                    resultado_pdf = doc.salvar_documentacao_pdf(caminho_saida_pdf)
+                    
+                    if resultado_pdf is None:
+                        raise Exception("O Playwright falhou. Feche o app, abra o terminal e digite: pip install playwright markdown && python -m playwright install chromium")
                 
                 resultados_sucesso.append(nome_pasta)
                 pastas_saida.add(pasta_raiz)
