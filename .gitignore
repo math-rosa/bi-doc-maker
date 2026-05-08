@@ -9,3 +9,9 @@ venv/
 env.bak/
 venv.bak/
 .env
+.product-venv/
+build/
+dist/
+*.spec
+frond-end-app/src-tauri/binaries/*
+!frond-end-app/src-tauri/binaries/.gitkeep

@@ -8,6 +8,8 @@ Extrai informações do modelo semântico e relatório.
 import os
 import json
 import re
+import sys
+import base64
 from pathlib import Path
 from datetime import datetime
 from dataclasses import dataclass, field
@@ -1215,87 +1217,241 @@ class DocumentadorPBIP:
 
     def exportar_diagrama_png(self, caminho_saida: Optional[str] = None) -> Optional[str]:
         """
-        Renderiza o diagrama ER Mermaid como imagem PNG usando Playwright.
-        
+        Gera um PNG leve do diagrama de relacionamentos usando Pillow.
+
         Args:
             caminho_saida: Caminho para salvar o PNG. Se None, salva na pasta do projeto.
-        
+
         Returns:
             Caminho do PNG gerado ou None se falhar.
         """
-        if not self.tabelas and not self.relacionamentos:
+        tabelas_visiveis = [
+            tabela for tabela in self.tabelas
+            if "LocalDateTable" not in tabela.nome and "DateTableTemplate" not in tabela.nome
+        ]
+        if not tabelas_visiveis and not self.relacionamentos:
             return None
-        
+
         try:
-            from playwright.sync_api import sync_playwright
+            from PIL import Image, ImageDraw, ImageFont
         except ImportError:
-            print("[AVISO] Playwright não instalado — diagrama PNG não será gerado.")
+            print("[AVISO] Pillow nao instalado - diagrama PNG nao sera gerado.")
             return None
-        
+
         if caminho_saida is None:
-            caminho_saida = str(self.caminho_projeto / f"{self.nome_projeto}_diagrama_er.png")
-        
-        codigo_mermaid = self._gerar_codigo_mermaid()
-        
-        # HTML mínimo que carrega o Mermaid e renderiza o diagrama
-        html = f"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="utf-8">
-            <style>
-                body {{
-                    margin: 0; padding: 40px;
-                    background: white;
-                    display: inline-block;
-                }}
-                #diagram {{
-                    display: inline-block;
-                }}
-            </style>
-        </head>
-        <body>
-            <div class="mermaid" id="diagram">
-{codigo_mermaid}
-            </div>
-            <script type="module">
-                import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
-                mermaid.initialize({{ startOnLoad: true, theme: 'default', er: {{ useMaxWidth: false }} }});
-            </script>
-        </body>
-        </html>
-        """
-        
+            caminho_saida = str(self.caminho_projeto / f"{self.nome_projeto}_diagrama_relacionamentos.png")
+
+        def fonte(tamanho: int, negrito: bool = False):
+            nomes = ["arialbd.ttf", "arial.ttf"] if negrito else ["arial.ttf", "segoeui.ttf"]
+            for nome in nomes:
+                try:
+                    return ImageFont.truetype(nome, tamanho)
+                except Exception:
+                    continue
+            return ImageFont.load_default()
+
+        def encurtar(texto: str, limite: int) -> str:
+            if len(texto) <= limite:
+                return texto
+            return texto[: max(0, limite - 3)] + "..."
+
         try:
-            with sync_playwright() as p:
-                browser = p.chromium.launch(headless=True)
-                # Configura a página com alta resolução (4K) e fator de escala maior para o PNG
-                page = browser.new_page(viewport={"width": 3840, "height": 2160}, device_scale_factor=3)
-                page.set_content(html, wait_until="networkidle")
-                
-                # Aguarda o Mermaid renderizar (o SVG aparece dentro do #diagram)
-                page.wait_for_selector("#diagram svg", timeout=15000)
-                
-                # Espera um pouco extra para garantir render completo
-                page.wait_for_timeout(1000)
-                
-                # Captura apenas o elemento do diagrama para PNG limpo
-                elemento = page.query_selector("#diagram")
-                if elemento:
-                    elemento.screenshot(path=caminho_saida, type="png")
-                else:
-                    # Fallback: captura a página inteira
-                    page.screenshot(path=caminho_saida, full_page=True, type="png")
-                
-                browser.close()
-            
+            tabelas = sorted(tabelas_visiveis, key=lambda item: item.nome.lower())
+            nomes_tabelas = {tabela.nome for tabela in tabelas}
+            relacionamentos = [
+                rel for rel in self.relacionamentos
+                if rel.tabela_origem in nomes_tabelas and rel.tabela_destino in nomes_tabelas
+            ]
+
+            total_tabelas = max(1, len(tabelas))
+            colunas_grid = max(1, min(4, int(total_tabelas ** 0.5) + 1))
+            linhas_grid = (total_tabelas + colunas_grid - 1) // colunas_grid
+            largura_caixa = 320
+            altura_caixa = 190
+            espacamento_x = 120
+            espacamento_y = 100
+            margem = 70
+            largura = max(900, margem * 2 + colunas_grid * largura_caixa + (colunas_grid - 1) * espacamento_x)
+            altura = max(620, margem * 2 + linhas_grid * altura_caixa + (linhas_grid - 1) * espacamento_y + 80)
+
+            imagem = Image.new("RGB", (largura, altura), "#f8fafc")
+            draw = ImageDraw.Draw(imagem)
+            fonte_titulo = fonte(28, negrito=True)
+            fonte_subtitulo = fonte(16)
+            fonte_tabela = fonte(17, negrito=True)
+            fonte_coluna = fonte(13)
+            fonte_rel = fonte(12)
+
+            draw.text((margem, 28), f"Diagrama de Relacionamentos - {self.nome_projeto}", fill="#172033", font=fonte_titulo)
+            resumo = f"{len(tabelas)} tabela(s) | {len(relacionamentos)} relacionamento(s)"
+            draw.text((margem, 62), resumo, fill="#637083", font=fonte_subtitulo)
+
+            posicoes: Dict[str, Tuple[int, int, int, int]] = {}
+            for indice, tabela in enumerate(tabelas):
+                linha = indice // colunas_grid
+                coluna = indice % colunas_grid
+                x1 = margem + coluna * (largura_caixa + espacamento_x)
+                y1 = 120 + linha * (altura_caixa + espacamento_y)
+                x2 = x1 + largura_caixa
+                y2 = y1 + altura_caixa
+                posicoes[tabela.nome] = (x1, y1, x2, y2)
+
+            for rel in relacionamentos:
+                origem = posicoes.get(rel.tabela_origem)
+                destino = posicoes.get(rel.tabela_destino)
+                if not origem or not destino:
+                    continue
+                ox = (origem[0] + origem[2]) // 2
+                oy = (origem[1] + origem[3]) // 2
+                dx = (destino[0] + destino[2]) // 2
+                dy = (destino[1] + destino[3]) // 2
+                cor_linha = "#1d5f8f" if rel.esta_ativo else "#94a3b8"
+                draw.line((ox, oy, dx, dy), fill=cor_linha, width=3)
+                meio_x = (ox + dx) // 2
+                meio_y = (oy + dy) // 2
+                rotulo = encurtar(f"{rel.coluna_origem} -> {rel.coluna_destino}", 32)
+                draw.rectangle((meio_x - 110, meio_y - 12, meio_x + 110, meio_y + 12), fill="#ffffff", outline="#cbd5e1")
+                draw.text((meio_x - 104, meio_y - 8), rotulo, fill="#334155", font=fonte_rel)
+
+            for tabela in tabelas:
+                x1, y1, x2, y2 = posicoes[tabela.nome]
+                draw.rounded_rectangle((x1, y1, x2, y2), radius=12, fill="#ffffff", outline="#cbd5e1", width=2)
+                draw.rounded_rectangle((x1, y1, x2, y1 + 42), radius=12, fill="#1d5f8f", outline="#1d5f8f")
+                draw.rectangle((x1, y1 + 28, x2, y1 + 42), fill="#1d5f8f")
+                draw.text((x1 + 14, y1 + 11), encurtar(tabela.nome, 30), fill="#ffffff", font=fonte_tabela)
+
+                y_texto = y1 + 54
+                colunas = tabela.colunas[:6]
+                for coluna in colunas:
+                    draw.text((x1 + 16, y_texto), f"- {encurtar(coluna.nome, 32)}", fill="#172033", font=fonte_coluna)
+                    y_texto += 19
+                extras = len(tabela.colunas) - len(colunas)
+                if extras > 0:
+                    draw.text((x1 + 16, y_texto), f"+ {extras} coluna(s)", fill="#637083", font=fonte_coluna)
+                    y_texto += 19
+                if tabela.medidas:
+                    draw.text((x1 + 16, y_texto), f"{len(tabela.medidas)} medida(s)", fill="#1d5f8f", font=fonte_coluna)
+
+            if not relacionamentos:
+                texto = "Nenhum relacionamento encontrado no modelo."
+                bbox = draw.textbbox((0, 0), texto, font=fonte_subtitulo)
+                texto_largura = bbox[2] - bbox[0]
+                draw.text(((largura - texto_largura) // 2, altura - 70), texto, fill="#637083", font=fonte_subtitulo)
+
+            Path(caminho_saida).parent.mkdir(parents=True, exist_ok=True)
+            imagem.save(caminho_saida, "PNG")
             self._caminho_diagrama_png = caminho_saida
-            print(f"[OK] Diagrama ER PNG salvo em: {caminho_saida}")
+            print(f"[OK] Diagrama de relacionamentos PNG salvo em: {caminho_saida}")
             return caminho_saida
-        
+
         except Exception as e:
             print(f"[AVISO] Falha ao gerar diagrama PNG: {e}")
             return None
+
+    def salvar_diagrama_er(self, caminho_saida: Optional[str] = None) -> Optional[str]:
+        """
+        Salva o Diagrama de Relacionamentos (ER) original em Mermaid.
+
+        Este arquivo preserva o mesmo diagrama usado na documentacao Markdown/HTML,
+        sem gerar uma representacao visual diferente.
+        """
+        if not self.tabelas and not self.relacionamentos:
+            return None
+
+        if caminho_saida is None:
+            caminho_saida = str(self.caminho_projeto / f"{self.nome_projeto}_diagrama_relacionamentos.mmd")
+
+        try:
+            Path(caminho_saida).parent.mkdir(parents=True, exist_ok=True)
+            with open(caminho_saida, "w", encoding="utf-8") as arquivo:
+                arquivo.write(self._gerar_codigo_mermaid())
+                arquivo.write("\n")
+            print(f"[OK] Diagrama de Relacionamentos (ER) salvo em: {caminho_saida}")
+            return caminho_saida
+        except Exception as e:
+            print(f"[AVISO] Falha ao salvar Diagrama de Relacionamentos (ER): {e}")
+            return None
+
+    def gerar_resumo_estruturado(
+        self,
+        outputs: Optional[Dict[str, str]] = None,
+        warnings: Optional[List[str]] = None
+    ) -> Dict:
+        """Retorna um resumo serializavel para a interface Tauri."""
+        total_colunas = sum(len(t.colunas) for t in self.tabelas)
+        total_medidas = sum(len(t.medidas) for t in self.tabelas)
+        total_calc = sum(len(t.colunas_calculadas) for t in self.tabelas)
+
+        def contar_filtros(pagina: InfoPagina) -> int:
+            if not pagina.filtros:
+                return 0
+            return len(self._interpretar_filtros_pagina(pagina.filtros))
+
+        return {
+            "ok": True,
+            "projectName": self.nome_projeto or self.caminho_projeto.name,
+            "layout": self.layout or "",
+            "counts": {
+                "tables": len(self.tabelas),
+                "relationships": len(self.relacionamentos),
+                "pages": len(self.paginas),
+                "columns": total_colunas,
+                "measures": total_medidas,
+                "calculatedColumns": total_calc,
+                "visuals": self.total_visuais,
+            },
+            "tables": [
+                {
+                    "name": tabela.nome,
+                    "hidden": tabela.esta_oculta,
+                    "columns": len(tabela.colunas),
+                    "measures": len(tabela.medidas),
+                    "calculatedColumns": len(tabela.colunas_calculadas),
+                    "sourceGroup": tabela.particao.grupo_consulta if tabela.particao else None,
+                }
+                for tabela in self.tabelas
+            ],
+            "relationships": [
+                {
+                    "id": rel.id,
+                    "fromTable": rel.tabela_origem,
+                    "fromColumn": rel.coluna_origem,
+                    "toTable": rel.tabela_destino,
+                    "toColumn": rel.coluna_destino,
+                    "bidirectional": rel.filtro_bidirecional,
+                    "active": rel.esta_ativo,
+                }
+                for rel in self.relacionamentos
+            ],
+            "pages": [
+                {
+                    "id": pagina.id,
+                    "name": pagina.nome_exibicao,
+                    "type": pagina.tipo,
+                    "width": pagina.largura,
+                    "height": pagina.altura,
+                    "visuals": len(pagina.visuais),
+                    "filters": contar_filtros(pagina),
+                }
+                for pagina in self.paginas
+            ],
+            "warnings": list(dict.fromkeys(warnings or [])),
+            "outputs": outputs or {},
+        }
+
+    def _obter_logo_path(self) -> Optional[Path]:
+        """Retorna a logo local do BI Doc Maker, incluindo modo PyInstaller."""
+        base_path = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
+        logo_path = base_path / "assets" / "bi-doc-maker-logo.png"
+        return logo_path if logo_path.is_file() else None
+
+    def _obter_logo_data_uri(self) -> str:
+        """Retorna a logo como data URI para HTML offline."""
+        logo_path = self._obter_logo_path()
+        if not logo_path:
+            return ""
+        encoded = base64.b64encode(logo_path.read_bytes()).decode("ascii")
+        return f"data:image/png;base64,{encoded}"
 
     def gerar_documentacao(self) -> str:
         """
@@ -1319,9 +1475,13 @@ class DocumentadorPBIP:
         # ========================================================================
         # CABEÇALHO PRINCIPAL
         # ========================================================================
-        # Usamos uma tag HTML img para injetar a logo oficial do Power BI no título
-        pbi_logo = "<img src='https://upload.wikimedia.org/wikipedia/commons/c/cf/New_Power_BI_Logo.svg' width='36' height='36' style='vertical-align: bottom; margin-right: 8px;'/>"
-        md.append(f"# {pbi_logo} Documentação do Modelo Power BI")
+        logo_data_uri = self._obter_logo_data_uri()
+        logo_html = (
+            f"<img src='{logo_data_uri}' width='36' height='36' "
+            "style='vertical-align: bottom; margin-right: 8px; border-radius: 8px;'/>"
+            if logo_data_uri else ""
+        )
+        md.append(f"# {logo_html} BI Doc Maker")
         md.append(f"")
         md.append(f"> **Projeto**: {self.nome_projeto}")
         md.append(f"> ")
@@ -1742,7 +1902,110 @@ class DocumentadorPBIP:
         
         print(f"[OK] Documentação MD salva em: {caminho_saida}")
         return caminho_saida
-    
+
+    def _gerar_html_documentacao(self, auto_print: bool = False) -> str:
+        """Gera HTML imprimivel a partir da documentacao Markdown."""
+        try:
+            import markdown
+        except ImportError:
+            raise ImportError("O pacote 'markdown' nao esta instalado. Execute: pip install markdown")
+
+        markdown_text = self.gerar_documentacao()
+        html_body = markdown.markdown(markdown_text, extensions=['tables', 'fenced_code', 'toc'])
+
+        css_style = """
+        html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+        body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; color: #2C3E50; line-height: 1.6; padding: 20px 40px; font-size: 10.5pt; }
+        h1, h2, h3, h4, h5 { color: #1A5276; font-weight: 600; margin-top: 1.5em; margin-bottom: 0.5em; page-break-after: avoid; }
+        h1 { border-bottom: 2px solid #2980B9; padding-bottom: 0.3em; font-size: 24pt; }
+        h2 { border-bottom: 1px solid #EAECEE; padding-bottom: 0.3em; font-size: 18pt; }
+        h3 { font-size: 14pt; color: #2980B9; }
+        table { border-collapse: collapse; width: 100%; margin: 1.5em 0; font-size: 9.5pt; box-shadow: 0 1px 3px rgba(0,0,0,0.1); table-layout: auto; word-break: break-word; }
+        th { background-color: #2980B9; color: white; padding: 10px 12px; text-align: left; font-weight: 600; }
+        td { border-bottom: 1px solid #EAECEE; padding: 10px 12px; }
+        tr:nth-child(even) { background-color: #F8F9F9; }
+        tr { page-break-inside: avoid; }
+        code { font-family: 'Consolas', 'Courier New', monospace; background-color: #F2F4F4; padding: 2px 5px; border-radius: 4px; font-size: 9pt; color: #C0392B; word-break: break-all; }
+        pre code { display: block; padding: 15px; border-left: 4px solid #2980B9; overflow-x: auto; line-height: 1.4; white-space: pre-wrap; word-wrap: break-word; border-radius: 0 6px 6px 0; }
+        blockquote { border-left: 4px solid #3498DB; background: #EBF5FB; padding: 12px 16px; margin: 1.5em 0; color: #2C3E50; border-radius: 0 4px 4px 0; }
+        hr { border: 0; height: 1px; background: #EAECEE; margin: 2em 0; }
+        pre code.hljs { border-left: 4px solid #2980B9; border-radius: 0 6px 6px 0; }
+        :not(pre) > code { background-color: #F2F4F4 !important; color: #C0392B !important; padding: 2px 5px; border-radius: 4px; font-size: 9pt; }
+        .language-mermaid { white-space: pre-wrap; word-wrap: break-word; font-family: 'Consolas', monospace; }
+        .mermaid { display: flex; justify-content: center; margin: 2em 0; }
+        @media print {
+            body { padding: 0; }
+            a { color: inherit; text-decoration: none; }
+        }
+        """
+
+        print_script = """
+            window.addEventListener("load", () => {
+                setTimeout(() => window.print(), 600);
+            });
+        """ if auto_print else ""
+
+        return f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <title>BI Doc Maker - {self.nome_projeto}</title>
+            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-light.min.css">
+            <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+            <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/sql.min.js"></script>
+            <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/powershell.min.js"></script>
+            <style>{css_style}</style>
+            <script type="module">
+                import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+                mermaid.initialize({{ startOnLoad: true, theme: 'default' }});
+
+                document.addEventListener("DOMContentLoaded", () => {{
+                    document.querySelectorAll("code.language-mermaid").forEach(el => {{
+                        const div = document.createElement("div");
+                        div.className = "mermaid";
+                        div.textContent = el.textContent;
+                        if (el.parentNode.tagName === 'PRE') {{
+                            el.parentNode.replaceWith(div);
+                        }}
+                    }});
+
+                    document.querySelectorAll("code.language-dax").forEach(el => {{
+                        el.classList.remove("language-dax");
+                        el.classList.add("language-sql");
+                    }});
+                    document.querySelectorAll("code.language-powerquery").forEach(el => {{
+                        el.classList.remove("language-powerquery");
+                        el.classList.add("language-powershell");
+                    }});
+
+                    hljs.highlightAll();
+                }});
+
+                {print_script}
+            </script>
+        </head>
+        <body>
+            {html_body}
+        </body>
+        </html>
+        """
+
+    def salvar_documentacao_html(self, caminho_saida: Optional[str] = None, auto_print: bool = True):
+        """
+        Salva a documentacao em HTML imprimivel para o usuario gerar PDF pelo navegador.
+        """
+        if caminho_saida is None:
+            caminho_saida = self.caminho_projeto / f"{self.nome_projeto}_documentacao.html"
+
+        html = self._gerar_html_documentacao(auto_print=auto_print)
+
+        with open(caminho_saida, 'w', encoding='utf-8') as f:
+            f.write(html)
+
+        print(f"[OK] Documentacao HTML salva em: {caminho_saida}")
+        return caminho_saida
+
     def salvar_documentacao_pdf(self, caminho_saida: Optional[str] = None):
         """
         Salva a documentação em formato PDF com renderização premium via Playwright.
@@ -1888,12 +2151,6 @@ class DocumentadorPBIP:
         if caminho_saida is None:
             caminho_saida = self.caminho_projeto / f"{self.nome_projeto}_documentacao.docx"
             
-        # Gera a imagem PNG do diagrama antes de montar o documento
-        # Salva na mesma pasta do arquivo DOCX de saída
-        if not self._caminho_diagrama_png:
-            caminho_img = str(Path(caminho_saida).parent / f"{self.nome_projeto}_diagrama_er.png")
-            self.exportar_diagrama_png(caminho_saida=caminho_img)
-        
         doc = Document()
         
         # ====================================================================
@@ -2132,13 +2389,24 @@ class DocumentadorPBIP:
             f'</w:pBdr>'
         )
         pPr.append(pBdr)
+
+        logo_path = self._obter_logo_path()
+        if logo_path:
+            try:
+                p_logo = doc.add_paragraph()
+                p_logo.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                p_logo.paragraph_format.space_before = Pt(22)
+                p_logo.paragraph_format.space_after = Pt(8)
+                p_logo.add_run().add_picture(str(logo_path), width=Cm(2.2))
+            except Exception as e:
+                print(f"  [AVISO] Falha ao inserir logo no DOCX: {e}")
         
         # Título único
         p_titulo = doc.add_paragraph()
         p_titulo.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        p_titulo.paragraph_format.space_before = Pt(30)
+        p_titulo.paragraph_format.space_before = Pt(16 if logo_path else 30)
         p_titulo.paragraph_format.space_after = Pt(10)
-        run = p_titulo.add_run(f"Documentação do Projeto Power BI:")
+        run = p_titulo.add_run("BI Doc Maker")
         run.font.size = Pt(22)
         run.font.name = 'Calibri Light'
         run.font.color.rgb = AZUL_SEC
