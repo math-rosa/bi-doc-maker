@@ -28,7 +28,7 @@
     },
     "bundle": {
       "active": true,
-      "identifier": "com.documentador.pbip",
+      "identifier": "com.mathrosa.bidocmaker",
       "icon": [
         "icons/icon.ico"
       ],

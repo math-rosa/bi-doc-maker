@@ -73,7 +73,7 @@ input {
 }
 
 button {
-  min-height: 42px;
+  min-height: 38px;
   border: 1px solid var(--border-strong);
   border-radius: 8px;
   padding: 0 16px;
@@ -117,7 +117,7 @@ p {
 }
 
 h1 {
-  font-size: 30px;
+  font-size: 28px;
   line-height: 1.16;
   font-weight: 750;
 }
@@ -130,7 +130,7 @@ h2 {
 
 .app-shell {
   min-height: 100vh;
-  padding: 28px;
+  padding: 20px;
   background:
     linear-gradient(180deg, color-mix(in srgb, var(--surface) 48%, transparent), transparent 240px),
     var(--app-bg);
@@ -146,7 +146,7 @@ h2 {
   align-items: center;
   justify-content: space-between;
   gap: 18px;
-  margin-bottom: 18px;
+  margin-bottom: 14px;
 }
 
 .brand {
@@ -161,9 +161,9 @@ h2 {
   align-items: flex-end;
   justify-content: center;
   gap: 3px;
-  width: 44px;
-  height: 44px;
-  flex: 0 0 44px;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: #322c48;
@@ -216,48 +216,11 @@ h2 {
   overflow: hidden;
 }
 
-.panel-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 18px;
-  padding: 22px 24px 18px;
-  border-bottom: 1px solid var(--border);
-}
-
-.panel-header p {
-  margin-top: 5px;
-  color: var(--muted);
-  font-size: 14px;
-}
-
-.status-pill {
-  min-width: 98px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 7px 12px;
-  text-align: center;
-  font-size: 12px;
-  font-weight: 800;
-}
-
-.status-pill.ready {
-  border-color: var(--success-border);
-  background: var(--success-bg);
-  color: var(--success-text);
-}
-
-.status-pill.working,
-.status-pill.pending {
-  border-color: var(--warning-border);
-  background: var(--warning-bg);
-  color: var(--warning-text);
-}
-
 .field-grid {
   display: grid;
-  gap: 18px;
-  padding: 22px 24px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  padding: 18px 20px;
 }
 
 .field label,
@@ -271,13 +234,13 @@ h2 {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 10px;
-  margin-top: 8px;
+  margin-top: 6px;
 }
 
 input[readonly] {
   width: 100%;
   min-width: 0;
-  min-height: 42px;
+  min-height: 38px;
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 0 12px;
@@ -290,7 +253,7 @@ input[readonly] {
 .text-input {
   width: 100%;
   min-width: 0;
-  min-height: 42px;
+  min-height: 38px;
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 0 12px;
@@ -307,7 +270,7 @@ input[readonly] {
 }
 
 .branding-section {
-  padding: 22px 24px;
+  padding: 16px 20px;
   border-top: 1px solid var(--border);
 }
 
@@ -316,7 +279,7 @@ input[readonly] {
   align-items: flex-start;
   justify-content: space-between;
   gap: 18px;
-  margin-bottom: 14px;
+  margin-bottom: 10px;
 }
 
 .section-heading h3 {
@@ -329,7 +292,7 @@ input[readonly] {
 .section-heading p {
   margin-top: 4px;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .branding-grid {
@@ -346,7 +309,7 @@ input[readonly] {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
-  margin-top: 14px;
+  margin-top: 12px;
 }
 
 .color-control {
@@ -354,7 +317,7 @@ input[readonly] {
   grid-template-columns: auto 44px minmax(0, 1fr);
   align-items: center;
   gap: 10px;
-  min-height: 48px;
+  min-height: 42px;
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 8px 10px;
@@ -389,7 +352,7 @@ input[readonly] {
 
 .format-section {
   margin: 0;
-  padding: 0 24px 22px;
+  padding: 0 20px 16px;
   border: 0;
 }
 
@@ -408,7 +371,7 @@ input[readonly] {
   display: flex;
   align-items: center;
   gap: 10px;
-  min-height: 46px;
+  min-height: 42px;
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 0 12px;
@@ -442,7 +405,7 @@ input[readonly] {
   align-items: center;
   justify-content: space-between;
   gap: 18px;
-  padding: 18px 24px;
+  padding: 14px 20px;
   border-top: 1px solid var(--border);
   background: var(--surface-muted);
 }
@@ -478,8 +441,8 @@ input[readonly] {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-top: 14px;
-  padding: 14px 16px;
+  margin-top: 12px;
+  padding: 12px 14px;
   box-shadow: none;
 }
 
@@ -522,6 +485,17 @@ input[readonly] {
   color: var(--error-text);
 }
 
+.notice.success {
+  justify-content: space-between;
+  border-color: var(--success-border);
+  background: var(--success-bg);
+  color: var(--success-text);
+}
+
+.notice.success div {
+  min-width: 0;
+}
+
 .spinner {
   width: 22px;
   height: 22px;
@@ -530,61 +504,6 @@ input[readonly] {
   border-top-color: var(--primary-bg);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
-}
-
-.outputs {
-  margin-top: 14px;
-  overflow: hidden;
-  border-color: var(--success-border);
-  background: var(--success-bg);
-  box-shadow: none;
-}
-
-.outputs-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 18px;
-  padding: 18px 20px;
-  border-bottom: 1px solid color-mix(in srgb, var(--success-border) 68%, transparent);
-}
-
-.outputs-header h2 {
-  color: var(--success-text);
-}
-
-.output-list {
-  display: grid;
-}
-
-.output-row {
-  display: grid;
-  grid-template-columns: 190px minmax(0, 1fr);
-  gap: 14px;
-  align-items: center;
-  min-height: 44px;
-  padding: 10px 20px;
-  border-top: 1px solid color-mix(in srgb, var(--success-border) 42%, transparent);
-}
-
-.output-row:first-child {
-  border-top: 0;
-}
-
-.output-row span {
-  color: var(--success-text);
-  font-weight: 800;
-}
-
-.output-row code {
-  display: block;
-  min-width: 0;
-  overflow: hidden;
-  color: var(--text);
-  font-family: "Segoe UI", Arial, sans-serif;
-  font-size: 13px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 @keyframes spin {
@@ -609,9 +528,8 @@ input[readonly] {
   }
 
   .topbar,
-  .panel-header,
   .action-row,
-  .outputs-header {
+  .notice.success {
     align-items: stretch;
     flex-direction: column;
   }
@@ -627,15 +545,11 @@ input[readonly] {
   }
 
   .path-row,
+  .field-grid,
   .branding-grid,
   .color-grid,
   .logo-row,
-  .format-grid,
-  .output-row {
+  .format-grid {
     grid-template-columns: 1fr;
-  }
-
-  .output-row {
-    gap: 4px;
   }
 }

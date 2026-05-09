@@ -1,14 +1,14 @@
 # BI Doc Maker Desktop App
 
-Esta pasta contem a interface desktop do BI Doc Maker, feita com Tauri v1.5, Svelte 4, TypeScript e Vite.
+Esta pasta contém a interface desktop do BI Doc Maker, feita com Tauri v1.5, Svelte 4, TypeScript e Vite.
 
-O app nao analisa PBIP diretamente no front-end. Ele chama o sidecar Python `documentador-core`, que fica em `src-tauri/binaries` durante o desenvolvimento e e empacotado junto com o instalador no build final.
+O app não analisa PBIP diretamente no front-end. Ele chama o sidecar Python `documentador-core`, que fica em `src-tauri/binaries` durante o desenvolvimento e é empacotado junto com o instalador no build final.
 
 ## Requisitos
 
 - Node.js 18+.
-- Rust toolchain estavel.
-- Dependencias Node instaladas com `npm install`.
+- Rust toolchain estável.
+- Dependências Node instaladas com `npm install`.
 - Sidecar Python gerado pelo script `..\build-windows.ps1`.
 
 ## Desenvolvimento
@@ -26,7 +26,7 @@ npm install
 npm run tauri:dev
 ```
 
-O Tauri abre a interface local e chama o executavel:
+O Tauri abre a interface local e chama o executável:
 
 ```text
 src-tauri\binaries\documentador-core-<triple>.exe
@@ -40,14 +40,24 @@ Use sempre o script da raiz:
 ..\build-windows.ps1
 ```
 
-Ele instala dependencias, empacota o core Python com PyInstaller, inclui o Graphviz portatil e executa `npm run tauri:build`.
+Ele instala dependências, empacota o core Python com PyInstaller e executa `npm run tauri:build`.
 
 ## Scripts
 
 - `npm run dev`: inicia apenas o Vite.
-- `npm run build`: gera o front-end estatico.
+- `npm run build`: gera o front-end estático.
 - `npm run tauri:dev`: abre o app Tauri em desenvolvimento.
 - `npm run tauri:build`: gera o build Tauri, normalmente chamado pelo script da raiz.
+
+## Fluxo da Interface
+
+1. Selecionar o projeto PBIP.
+2. Selecionar a pasta de saída.
+3. Configurar título, logo e cores da documentação.
+4. Escolher Markdown, Word e/ou HTML / Salvar PDF.
+5. Gerar a documentação.
+
+Após a exportação, a interface mostra uma confirmação simples e o botão **Abrir pasta**.
 
 ## Tecnologias
 

@@ -123,11 +123,6 @@ def comando_export(args: argparse.Namespace, logs: CapturaLogs) -> Dict:
 
     with redirect_stdout(logs):
         doc.aplicar_branding(branding)
-        caminho_diagrama = doc.exportar_diagrama_png(
-            str(output_dir / f"{doc.nome_projeto}_diagrama_relacionamentos.png")
-        )
-        if caminho_diagrama:
-            outputs["png"] = str(Path(caminho_diagrama).resolve())
 
         for formato in formatos:
             caminho_saida = output_dir / f"{doc.nome_projeto}_documentacao.{formato}"
