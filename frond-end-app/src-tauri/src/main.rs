@@ -74,6 +74,25 @@ fn open_output_file(path: String) -> Result<(), String> {
         .map_err(|error| format!("Falha ao abrir o arquivo gerado: {error}"))
 }
 
+#[tauri::command]
+fn open_external_url(url: String) -> Result<(), String> {
+    let url = url.trim();
+    let allowed = [
+        "https://github.com/math-rosa/bi-doc-maker",
+        "https://www.linkedin.com/in/mathrosa96/",
+    ];
+
+    if !allowed.contains(&url) {
+        return Err("Link externo nao permitido.".to_string());
+    }
+
+    SystemCommand::new("explorer.exe")
+        .arg(url)
+        .spawn()
+        .map(|_| ())
+        .map_err(|error| format!("Falha ao abrir o link no navegador: {error}"))
+}
+
 async fn run_core_async(args: Vec<String>) -> Result<Value, String> {
     tauri::async_runtime::spawn_blocking(move || run_core_blocking(args))
         .await
@@ -135,7 +154,8 @@ fn main() {
             analyze_project,
             export_project,
             open_output_folder,
-            open_output_file
+            open_output_file,
+            open_external_url
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

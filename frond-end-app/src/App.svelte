@@ -27,6 +27,8 @@
   };
   const outputFormats: OutputFormat[] = ["md", "docx", "html"];
   const brandingStorageKey = "bi-doc-maker-branding";
+  const githubUrl = "https://github.com/math-rosa/bi-doc-maker";
+  const linkedinUrl = "https://www.linkedin.com/in/mathrosa96/";
   const defaultBranding: BrandingSettings = {
     documentTitle: "BI Doc Maker",
     logoPath: "",
@@ -131,6 +133,14 @@
 
   const toggleTheme = () => {
     applyTheme(theme === "dark" ? "light" : "dark");
+  };
+
+  const openExternalLink = async (url: string) => {
+    try {
+      await invoke("open_external_url", { url });
+    } catch (error) {
+      errorMessage = String(error);
+    }
   };
 
   const pickProjectFolder = async () => {
@@ -242,14 +252,32 @@
         </div>
       </div>
 
-      <button
-        class="theme-toggle"
-        type="button"
-        aria-label={theme === "dark" ? "Ativar modo claro" : "Ativar modo escuro"}
-        on:click={toggleTheme}
-      >
-        {theme === "dark" ? "Modo claro" : "Modo escuro"}
-      </button>
+      <div class="topbar-actions">
+        <button
+          class="link-button"
+          type="button"
+          aria-label="Abrir GitHub do BI Doc Maker"
+          on:click={() => openExternalLink(githubUrl)}
+        >
+          GitHub
+        </button>
+        <button
+          class="link-button"
+          type="button"
+          aria-label="Abrir LinkedIn de Math Rosa"
+          on:click={() => openExternalLink(linkedinUrl)}
+        >
+          LinkedIn
+        </button>
+        <button
+          class="theme-toggle"
+          type="button"
+          aria-label={theme === "dark" ? "Ativar modo claro" : "Ativar modo escuro"}
+          on:click={toggleTheme}
+        >
+          {theme === "dark" ? "Modo claro" : "Modo escuro"}
+        </button>
+      </div>
     </header>
 
     <section class="panel control-panel">

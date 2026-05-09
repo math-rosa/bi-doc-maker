@@ -200,8 +200,19 @@ h2 {
   text-transform: uppercase;
 }
 
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .theme-toggle {
   min-width: 122px;
+}
+
+.link-button {
+  min-width: auto;
+  padding: 0 14px;
 }
 
 .panel,
@@ -539,9 +550,15 @@ input[readonly] {
   }
 
   .theme-toggle,
+  .link-button,
   .primary-button,
   .secondary-button {
     width: 100%;
+  }
+
+  .topbar-actions {
+    display: grid;
+    grid-template-columns: 1fr;
   }
 
   .path-row,
