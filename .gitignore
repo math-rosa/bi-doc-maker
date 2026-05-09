@@ -13,6 +13,7 @@ venv.bak/
 .product-tools/
 build/
 dist/
+release/
 *.spec
 frond-end-app/src-tauri/binaries/*
 !frond-end-app/src-tauri/binaries/.gitkeep
