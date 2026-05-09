@@ -1,8 +1,9 @@
 [package]
 name = "frond-end-app"
 version = "0.1.0"
-description = "BI Doc Maker - Tauri"
-authors = ["you"]
+description = "BI Doc Maker desktop shell"
+authors = ["Math Rosa"]
+license = "MIT"
 edition = "2021"
 
 [build-dependencies]

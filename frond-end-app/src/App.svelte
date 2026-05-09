@@ -5,6 +5,13 @@
 
   type OutputFormat = "md" | "docx" | "html";
   type ThemeMode = "light" | "dark";
+  type BrandingSettings = {
+    documentTitle: string;
+    logoPath: string;
+    primaryColor: string;
+    secondaryColor: string;
+    lightColor: string;
+  };
 
   type CoreResult = {
     ok: boolean;
@@ -20,6 +27,15 @@
     png: "PNG do diagrama de relacionamentos"
   };
   const outputFormats: OutputFormat[] = ["md", "docx", "html"];
+  const outputOrder = ["md", "docx", "html", "png"];
+  const brandingStorageKey = "bi-doc-maker-branding";
+  const defaultBranding: BrandingSettings = {
+    documentTitle: "BI Doc Maker",
+    logoPath: "",
+    primaryColor: "#003D6B",
+    secondaryColor: "#006DAA",
+    lightColor: "#D6E8F5"
+  };
 
   let selectedPath = "";
   let outputPath = "";
@@ -27,6 +43,8 @@
   let errorMessage = "";
   let isExporting = false;
   let theme: ThemeMode = "light";
+  let brandingReady = false;
+  let branding: BrandingSettings = { ...defaultBranding };
   let selectedFormats: Record<OutputFormat, boolean> = {
     md: true,
     docx: true,
@@ -46,6 +64,40 @@
     return `${labels.slice(0, -1).join(", ")} e ${labels[labels.length - 1]}`;
   };
 
+  const normalizeColor = (value: unknown, fallback: string): string => {
+    const color = String(value ?? "").trim();
+    return /^#[0-9a-fA-F]{6}$/.test(color) ? color.toUpperCase() : fallback;
+  };
+
+  const loadBranding = () => {
+    const stored = localStorage.getItem(brandingStorageKey);
+    if (!stored) {
+      brandingReady = true;
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(stored) as Partial<BrandingSettings>;
+      branding = {
+        documentTitle: String(parsed.documentTitle ?? defaultBranding.documentTitle),
+        logoPath: String(parsed.logoPath ?? ""),
+        primaryColor: normalizeColor(parsed.primaryColor, defaultBranding.primaryColor),
+        secondaryColor: normalizeColor(parsed.secondaryColor, defaultBranding.secondaryColor),
+        lightColor: normalizeColor(parsed.lightColor, defaultBranding.lightColor)
+      };
+    } catch {
+      branding = { ...defaultBranding };
+    } finally {
+      brandingReady = true;
+    }
+  };
+
+  const persistBranding = () => {
+    if (brandingReady) {
+      localStorage.setItem(brandingStorageKey, JSON.stringify(branding));
+    }
+  };
+
   const applyTheme = (mode: ThemeMode) => {
     theme = mode;
     document.documentElement.dataset.theme = mode;
@@ -56,14 +108,17 @@
     const storedTheme = localStorage.getItem("bi-doc-maker-theme");
     if (storedTheme === "light" || storedTheme === "dark") {
       applyTheme(storedTheme);
-      return;
+    } else {
+      const systemTheme = window.matchMedia("(prefers-color-scheme: dark)").matches
+        ? "dark"
+        : "light";
+      applyTheme(systemTheme);
     }
 
-    const systemTheme = window.matchMedia("(prefers-color-scheme: dark)").matches
-      ? "dark"
-      : "light";
-    applyTheme(systemTheme);
+    loadBranding();
   });
+
+  $: persistBranding();
 
   $: activeFormats = outputFormats.filter((format) => selectedFormats[format]);
   $: canExport =
@@ -71,6 +126,21 @@
     Boolean(outputPath) &&
     activeFormats.length > 0 &&
     !isExporting;
+  $: selectedFormatText =
+    activeFormats.length === 1
+      ? "1 formato selecionado"
+      : `${activeFormats.length} formatos selecionados`;
+  $: readinessMessage = isExporting
+    ? "A documentacao esta sendo gerada."
+    : !selectedPath
+      ? "Selecione a pasta do projeto PBIP."
+      : !outputPath
+        ? "Escolha a pasta de saida."
+        : activeFormats.length === 0
+          ? "Marque pelo menos um formato."
+          : "Pronto para gerar a documentacao.";
+  $: statusLabel = isExporting ? "Processando" : canExport ? "Pronto" : "Pendente";
+  $: statusTone = isExporting ? "working" : canExport ? "ready" : "pending";
 
   const toggleTheme = () => {
     applyTheme(theme === "dark" ? "light" : "dark");
@@ -97,6 +167,32 @@
     }
   };
 
+  const pickLogoFile = async () => {
+    const result = await openDialog({
+      multiple: false,
+      filters: [{ name: "Imagem", extensions: ["png", "jpg", "jpeg"] }]
+    });
+    if (typeof result === "string") {
+      branding = { ...branding, logoPath: result };
+      exportResult = null;
+      errorMessage = "";
+    }
+  };
+
+  const clearLogoFile = () => {
+    branding = { ...branding, logoPath: "" };
+    exportResult = null;
+    errorMessage = "";
+  };
+
+  const exportBranding = () => ({
+    documentTitle: branding.documentTitle.trim() || defaultBranding.documentTitle,
+    logoPath: branding.logoPath.trim(),
+    primaryColor: normalizeColor(branding.primaryColor, defaultBranding.primaryColor),
+    secondaryColor: normalizeColor(branding.secondaryColor, defaultBranding.secondaryColor),
+    lightColor: normalizeColor(branding.lightColor, defaultBranding.lightColor)
+  });
+
   const exportDocumentation = async () => {
     const formats = activeFormats;
     if (!selectedPath || !outputPath || formats.length === 0) {
@@ -112,7 +208,8 @@
       const result = await invoke<CoreResult>("export_project", {
         path: selectedPath,
         outputDir: outputPath,
-        formats
+        formats,
+        branding: exportBranding()
       });
       if (!result.ok) {
         throw new Error(result.error ?? "Falha ao gerar a documentacao.");
@@ -136,23 +233,36 @@
     }
   };
 
-  $: generatedFormats = exportResult
-    ? Object.keys(exportResult.outputs).filter((format) => format !== "png")
+  $: generatedEntries = exportResult
+    ? outputOrder
+        .filter((format) => Boolean(exportResult?.outputs[format]))
+        .map((format) => ({ format, path: exportResult?.outputs[format] ?? "" }))
     : [];
-  $: generatedFormatsText = joinLabels(generatedFormats.map(labelForFormat));
+  $: generatedFormats = generatedEntries
+    .filter(({ format }) => format !== "png")
+    .map(({ format }) => labelForFormat(format));
+  $: generatedFormatsText = joinLabels(generatedFormats);
   $: hasDiagramPng = Boolean(exportResult?.outputs.png);
   $: generatedMessage = `${generatedFormats.length > 1 ? "Foram salvos" : "Foi salvo"} ${
     generatedFormatsText || "o formato selecionado"
   }${hasDiagramPng ? " + PNG do diagrama de relacionamentos" : ""} na pasta Doc_BI.`;
 </script>
 
-<main class="app-shell">
+<main class="app-shell" aria-busy={isExporting}>
   <section class="workspace">
     <header class="topbar">
-      <div>
-        <p class="eyebrow">BI Doc Maker</p>
-        <h1>Documentacao PBIP</h1>
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">
+          <span class="bar bar-blue"></span>
+          <span class="bar bar-green"></span>
+          <span class="bar bar-yellow"></span>
+        </div>
+        <div>
+          <p class="eyebrow">BI Doc Maker</p>
+          <h1>Documentacao PBIP</h1>
+        </div>
       </div>
+
       <button
         class="theme-toggle"
         type="button"
@@ -163,39 +273,128 @@
       </button>
     </header>
 
-    <section class="panel">
-      <div class="field-grid">
-        <label>
-          <span>Projeto</span>
-          <div class="path-row">
-            <input readonly value={selectedPath || "Nenhum projeto selecionado"} />
-            <button type="button" on:click={pickProjectFolder}>Selecionar</button>
-          </div>
-        </label>
-
-        <label>
-          <span>Saida</span>
-          <div class="path-row">
-            <input readonly value={outputPath || "Nenhuma pasta selecionada"} />
-            <button type="button" on:click={pickOutputFolder}>Alterar</button>
-          </div>
-        </label>
+    <section class="panel control-panel">
+      <div class="panel-header">
+        <div>
+          <h2>Gerar documentacao</h2>
+          <p>{readinessMessage}</p>
+        </div>
+        <span class={`status-pill ${statusTone}`}>{statusLabel}</span>
       </div>
 
-      <div class="toolbar">
-        <div class="formats" aria-label="Formatos de exportacao">
-          {#each outputFormats as format}
-            <label class="check">
+      <div class="field-grid">
+        <div class="field">
+          <label for="project-path">Projeto PBIP</label>
+          <div class="path-row">
+            <input
+              id="project-path"
+              readonly
+              value={selectedPath || "Nenhum projeto selecionado"}
+              title={selectedPath || "Nenhum projeto selecionado"}
+            />
+            <button type="button" class="secondary-button" on:click={pickProjectFolder} disabled={isExporting}>
+              Selecionar
+            </button>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="output-path">Saida</label>
+          <div class="path-row">
+            <input
+              id="output-path"
+              readonly
+              value={outputPath || "Nenhuma pasta selecionada"}
+              title={outputPath || "Nenhuma pasta selecionada"}
+            />
+            <button type="button" class="secondary-button" on:click={pickOutputFolder} disabled={isExporting}>
+              Alterar
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <section class="branding-section">
+        <div class="section-heading">
+          <div>
+            <h3>Personalizacao</h3>
+            <p>Defina titulo, logo e cores usadas nos documentos gerados.</p>
+          </div>
+        </div>
+
+        <div class="branding-grid">
+          <div class="field">
+            <label for="document-title">Titulo do documento</label>
+            <input
+              id="document-title"
+              class="text-input"
+              bind:value={branding.documentTitle}
+              disabled={isExporting}
+              placeholder="BI Doc Maker"
+            />
+          </div>
+
+          <div class="field">
+            <label for="company-logo">Logo da empresa</label>
+            <div class="path-row logo-row">
               <input
-                type="checkbox"
-                bind:checked={selectedFormats[format]}
+                id="company-logo"
+                readonly
+                value={branding.logoPath || "Logo padrao do BI Doc Maker"}
+                title={branding.logoPath || "Logo padrao do BI Doc Maker"}
               />
+              <button type="button" class="secondary-button" on:click={pickLogoFile} disabled={isExporting}>
+                Selecionar
+              </button>
+              <button
+                type="button"
+                class="secondary-button compact-button"
+                on:click={clearLogoFile}
+                disabled={isExporting || !branding.logoPath}
+              >
+                Remover
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="color-grid">
+          <label class="color-control">
+            <span>Primaria</span>
+            <input type="color" bind:value={branding.primaryColor} disabled={isExporting} />
+            <code>{branding.primaryColor}</code>
+          </label>
+          <label class="color-control">
+            <span>Secundaria</span>
+            <input type="color" bind:value={branding.secondaryColor} disabled={isExporting} />
+            <code>{branding.secondaryColor}</code>
+          </label>
+          <label class="color-control">
+            <span>Fundo claro</span>
+            <input type="color" bind:value={branding.lightColor} disabled={isExporting} />
+            <code>{branding.lightColor}</code>
+          </label>
+        </div>
+      </section>
+
+      <fieldset class="format-section" disabled={isExporting}>
+        <legend>Formatos de saida</legend>
+        <div class="format-grid">
+          {#each outputFormats as format}
+            <label class:selected={selectedFormats[format]} class="format-option">
+              <input type="checkbox" bind:checked={selectedFormats[format]} />
               <span>{formatLabels[format]}</span>
             </label>
           {/each}
         </div>
+      </fieldset>
 
-        <button class="primary" type="button" disabled={!canExport} on:click={exportDocumentation}>
+      <div class="action-row">
+        <div class="action-summary">
+          <strong>{selectedFormatText}</strong>
+          <span>O PNG do diagrama acompanha a exportacao.</span>
+        </div>
+        <button type="button" class="primary-button" on:click={exportDocumentation} disabled={!canExport}>
           {isExporting ? "Gerando..." : "Gerar documentacao"}
         </button>
       </div>
@@ -212,24 +411,30 @@
     {/if}
 
     {#if errorMessage}
-      <section class="notice error">
-        <strong>Erro</strong>
+      <section class="notice error" role="alert">
+        <strong>Nao foi possivel gerar</strong>
         <span>{errorMessage}</span>
       </section>
     {/if}
 
-    {#if exportResult && Object.keys(exportResult.outputs).length > 0}
-      <section class="panel outputs">
-        <div>
-          <h2>Documentacao salva</h2>
-          <p class="output-summary">{generatedMessage}</p>
-          <ul>
-            {#each Object.entries(exportResult.outputs) as [format, path]}
-              <li><strong>{labelForFormat(format)}:</strong> {path}</li>
-            {/each}
-          </ul>
+    {#if exportResult && generatedEntries.length}
+      <section class="panel outputs" aria-live="polite">
+        <div class="outputs-header">
+          <div>
+            <p class="eyebrow">Arquivos gerados</p>
+            <h2>{generatedMessage}</h2>
+          </div>
+          <button type="button" class="secondary-button" on:click={openOutputFolder}>Abrir pasta</button>
         </div>
-        <button type="button" on:click={openOutputFolder}>Abrir pasta</button>
+
+        <div class="output-list">
+          {#each generatedEntries as entry}
+            <div class="output-row">
+              <span>{labelForFormat(entry.format)}</span>
+              <code title={entry.path}>{entry.path}</code>
+            </div>
+          {/each}
+        </div>
       </section>
     {/if}
   </section>

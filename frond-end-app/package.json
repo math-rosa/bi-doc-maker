@@ -2,6 +2,9 @@
   "name": "bi-doc-maker",
   "private": true,
   "version": "0.1.0",
+  "description": "BI Doc Maker desktop app for documenting Power BI PBIP projects",
+  "author": "Math Rosa",
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -12,7 +15,6 @@
   },
   "dependencies": {
     "@tauri-apps/api": "^1.5.0",
-    "docx": "^8.5.0",
     "svelte": "^4.2.18"
   },
   "devDependencies": {

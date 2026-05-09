@@ -10,8 +10,11 @@ env.bak/
 venv.bak/
 .env
 .product-venv/
+.product-tools/
 build/
 dist/
 *.spec
 frond-end-app/src-tauri/binaries/*
 !frond-end-app/src-tauri/binaries/.gitkeep
+**/Doc_BI/
+_fix_docx.py
