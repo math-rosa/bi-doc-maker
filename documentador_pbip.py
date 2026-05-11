@@ -1,4 +1,4 @@
-"""
+﻿"""
 Documentador de Projetos Power BI (.pbip)
 
 Script para gerar documentação automática em Markdown de projetos Power BI Desktop.
@@ -110,7 +110,7 @@ class InfoModelo:
 @dataclass
 class BrandingConfig:
     """Configuracao visual usada na documentacao gerada."""
-    document_title: str = "BI Doc Maker"
+    document_title: str = "Documentação Power BI"
     logo_path: Optional[Path] = None
     primary_color: str = "#003D6B"
     secondary_color: str = "#006DAA"
@@ -2765,7 +2765,7 @@ class DocumentadorPBIP:
                 raise ValueError(f"Cor invalida em {chave}: use o formato #RRGGBB.")
             return valor.upper()
 
-        titulo = valor_texto("documentTitle", "document_title") or "BI Doc Maker"
+        titulo = valor_texto("documentTitle", "document_title") or "Documentação Power BI"
         logo_raw = valor_texto("logoPath", "logo_path")
         logo_path = None
         if logo_raw:
@@ -2788,13 +2788,10 @@ class DocumentadorPBIP:
         return cor.lstrip("#").upper()
 
     def _obter_logo_path(self) -> Optional[Path]:
-        """Retorna a logo customizada ou a logo local do BI Doc Maker."""
+        """Retorna apenas a logo customizada informada para a documentacao."""
         if self.branding.logo_path and self.branding.logo_path.is_file():
             return self.branding.logo_path
-
-        base_path = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
-        logo_path = base_path / "assets" / "bi-doc-maker-logo.png"
-        return logo_path if logo_path.is_file() else None
+        return None
 
     def _obter_logo_data_uri(self) -> str:
         """Retorna a logo como data URI para HTML offline."""
@@ -3380,11 +3377,7 @@ class DocumentadorPBIP:
             .replace("#EBF5FB", cor_clara)
         )
 
-        print_script = """
-            window.addEventListener("load", () => {
-                setTimeout(() => window.print(), 600);
-            });
-        """ if auto_print else ""
+        print_script = ""
 
         return f"""
         <!DOCTYPE html>
@@ -3435,7 +3428,7 @@ class DocumentadorPBIP:
         </html>
         """
 
-    def salvar_documentacao_html(self, caminho_saida: Optional[str] = None, auto_print: bool = True):
+    def salvar_documentacao_html(self, caminho_saida: Optional[str] = None, auto_print: bool = False):
         """
         Salva a documentacao em HTML imprimivel para o usuario gerar PDF pelo navegador.
         """

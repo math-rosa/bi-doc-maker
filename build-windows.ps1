@@ -17,34 +17,16 @@ function Invoke-SystemPython {
     $PyLauncher = Get-Command py -ErrorAction SilentlyContinue
     if ($PyLauncher) {
         & py -3 @Arguments
-        if ($LASTEXITCODE -ne 0) {
-            throw "Python launcher falhou com codigo $LASTEXITCODE."
-        }
         return
     }
 
     $Python = Get-Command python -ErrorAction SilentlyContinue
     if ($Python) {
         & python @Arguments
-        if ($LASTEXITCODE -ne 0) {
-            throw "Python falhou com codigo $LASTEXITCODE."
-        }
         return
     }
 
     throw "Python nao encontrado. Instale Python 3 e deixe-o disponivel no PATH ou via py launcher."
-}
-
-function Invoke-NativeCommand {
-    param(
-        [string]$FilePath,
-        [string[]]$Arguments
-    )
-
-    & $FilePath @Arguments
-    if ($LASTEXITCODE -ne 0) {
-        throw "Comando falhou com codigo $LASTEXITCODE`: $FilePath $($Arguments -join ' ')"
-    }
 }
 
 function Get-RustHostTriple {
@@ -65,22 +47,19 @@ Write-Host "==> Criando ambiente Python de produto"
 Invoke-SystemPython @("-m", "venv", $VenvDir)
 
 Write-Host "==> Instalando dependencias Python"
-Invoke-NativeCommand $VenvPython @("-m", "pip", "install", "--upgrade", "pip")
-Invoke-NativeCommand $VenvPython @("-m", "pip", "install", "-r", (Join-Path $Root "requirements.txt"), "pyinstaller")
+& $VenvPython -m pip install --upgrade pip
+& $VenvPython -m pip install -r (Join-Path $Root "requirements.txt") pyinstaller
 
 Write-Host "==> Gerando sidecar Python com PyInstaller"
-Invoke-NativeCommand $VenvPython @(
-    "-m", "PyInstaller",
-    "--clean",
-    "--noconfirm",
-    "--onefile",
-    "--name", $SidecarName,
-    "--exclude-module", "playwright",
-    "--add-data", "$Root\assets\bi-doc-maker-logo.png;assets",
-    "--collect-all", "markdown",
-    "--collect-all", "docx",
+& $VenvPython -m PyInstaller `
+    --clean `
+    --noconfirm `
+    --onefile `
+    --name $SidecarName `
+    --exclude-module playwright `
+    --collect-all markdown `
+    --collect-all docx `
     (Join-Path $Root "documentador_core_cli.py")
-)
 
 $Triple = Get-RustHostTriple
 $DistExe = Join-Path $Root "dist\$SidecarName.exe"
@@ -98,11 +77,11 @@ Push-Location $TauriDir
 try {
     if (-not $SkipNpmInstall) {
         Write-Host "==> Instalando dependencias Node"
-        Invoke-NativeCommand "npm.cmd" @("ci")
+        npm.cmd ci
     }
 
     Write-Host "==> Gerando instalador Tauri"
-    Invoke-NativeCommand "npm.cmd" @("run", "tauri:build")
+    npm.cmd run tauri:build
 }
 finally {
     Pop-Location

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
+import logging
 import sys
 import traceback
 from contextlib import redirect_stdout
@@ -17,6 +17,9 @@ from pathlib import Path
 from typing import Dict, List
 
 from documentador_pbip import DocumentadorPBIP
+
+logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s", stream=sys.stderr)
+logger = logging.getLogger(__name__)
 
 
 FORMATOS_SUPORTADOS = {"md", "docx", "html"}
@@ -72,34 +75,6 @@ def _normalizar_formatos(valor: str) -> List[str]:
     return formatos
 
 
-def _normalizar_branding(valor: str | None) -> Dict:
-    if not valor:
-        return {}
-
-    try:
-        branding = json.loads(valor)
-    except json.JSONDecodeError as exc:
-        raise ValueError(f"JSON de branding invalido: {exc}") from exc
-
-    if not isinstance(branding, dict):
-        raise ValueError("JSON de branding deve ser um objeto.")
-
-    for chave in ("primaryColor", "secondaryColor", "lightColor"):
-        cor = str(branding.get(chave) or "").strip()
-        if cor and not re.fullmatch(r"#[0-9a-fA-F]{6}", cor):
-            raise ValueError(f"Cor invalida em {chave}: use o formato #RRGGBB.")
-
-    logo = str(branding.get("logoPath") or "").strip()
-    if logo:
-        logo_path = Path(logo).expanduser()
-        if not logo_path.is_file():
-            raise ValueError(f"Logo nao encontrado: {logo}")
-        if logo_path.suffix.lower() not in {".png", ".jpg", ".jpeg"}:
-            raise ValueError("Logo deve ser uma imagem .png, .jpg ou .jpeg.")
-
-    return branding
-
-
 def _analisar(caminho_projeto: str, logs: CapturaLogs) -> DocumentadorPBIP:
     with redirect_stdout(logs):
         doc = DocumentadorPBIP(caminho_projeto)
@@ -114,16 +89,15 @@ def comando_analyze(args: argparse.Namespace, logs: CapturaLogs) -> Dict:
 
 def comando_export(args: argparse.Namespace, logs: CapturaLogs) -> Dict:
     formatos = _normalizar_formatos(args.formats)
-    branding = _normalizar_branding(args.branding_json)
     output_dir = Path(args.output_dir) / "Doc_BI"
     output_dir.mkdir(parents=True, exist_ok=True)
 
     doc = _analisar(args.project, logs)
+    branding = json.loads(args.branding_json) if args.branding_json else None
+    doc.aplicar_branding(branding)
     outputs: Dict[str, str] = {}
 
     with redirect_stdout(logs):
-        doc.aplicar_branding(branding)
-
         for formato in formatos:
             caminho_saida = output_dir / f"{doc.nome_projeto}_documentacao.{formato}"
             if formato == "md":
@@ -131,7 +105,7 @@ def comando_export(args: argparse.Namespace, logs: CapturaLogs) -> Dict:
             elif formato == "docx":
                 gerado = doc.salvar_documentacao_docx(str(caminho_saida))
             elif formato == "html":
-                gerado = doc.salvar_documentacao_html(str(caminho_saida), auto_print=True)
+                gerado = doc.salvar_documentacao_html(str(caminho_saida), auto_print=False)
             else:
                 raise ValueError(f"Formato nao suportado: {formato}")
 
@@ -154,7 +128,7 @@ def _criar_parser() -> argparse.ArgumentParser:
     export.add_argument("--project", required=True, help="Pasta do projeto .pbip.")
     export.add_argument("--output-dir", required=True, help="Pasta onde os arquivos serao salvos.")
     export.add_argument("--formats", required=True, help="Formatos separados por virgula: md,docx,html.")
-    export.add_argument("--branding-json", help="Configuracao visual em JSON.")
+    export.add_argument("--branding-json", help="JSON opcional com logoPath, primaryColor, secondaryColor e lightColor.")
     export.add_argument("--json", action="store_true", help="Mantido para contrato com o sidecar.")
 
     return parser
