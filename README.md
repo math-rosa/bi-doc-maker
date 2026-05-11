@@ -4,6 +4,14 @@ BI Doc Maker é um aplicativo desktop Windows para gerar documentação técnica
 
 O produto combina uma interface Tauri + Svelte com um core Python empacotado como sidecar. Toda a análise é feita localmente: o app lê os metadados do PBIP, interpreta o modelo e gera arquivos prontos para entrega, auditoria, governança ou passagem de conhecimento.
 
+## Visao Geral do Projeto
+
+- Core Python em `documentador_pbip.py` para ler PBIP e gerar a documentação.
+- CLI em `documentador_core_cli.py` que expõe o core via JSON e vira sidecar do app.
+- App desktop em `frond-end-app/` (Tauri + Svelte) para fluxo de uso e interface.
+- Build Windows em `build-windows.ps1` (PyInstaller + Tauri).
+- Site institucional em `website/` com exemplo de documento em PDF.
+
 ## Recursos
 
 - Análise local de projetos Power BI `.pbip`.
@@ -73,6 +81,8 @@ Esses comentários aparecem acima da inferência automática e ajudam a separar 
 ## Site Institucional
 
 O repositório também inclui um site estático em `website/`, criado com Vite, HTML, CSS e JavaScript puro.
+O PDF exibido no mockup fica em `website/public/documentacao-power-bi-corporate-spend.pdf`.
+O deploy do site é feito via GitHub Pages pelo workflow `.github/workflows/pages.yml`.
 
 Comandos principais:
 
@@ -211,6 +221,8 @@ npm.cmd run build
 ## Publicação
 
 Este repositório contém o código-fonte do produto e do site. Artefatos gerados, instaladores, ambientes virtuais, `node_modules`, `target`, `dist` e builds locais não são versionados.
+
+O site é publicado automaticamente no GitHub Pages ao fazer push na `main`.
 
 Para gerar uma versão instalável, rode:
 
