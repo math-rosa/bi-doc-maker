@@ -318,10 +318,17 @@ body {
 .mockup-body {
   background: var(--bg-secondary);
   aspect-ratio: 16/9;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--spacing-xl);
+  display: block;
+  padding: 0;
+  overflow: hidden;
+}
+
+.mockup-pdf {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+  background: var(--bg-secondary);
 }
 
 .placeholder-content {
