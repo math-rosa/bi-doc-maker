@@ -12,6 +12,8 @@
     "preview": "vite preview"
   },
   "devDependencies": {
+    "@emnapi/core": "^1.10.0",
+    "@emnapi/runtime": "^1.10.0",
     "vite": "^8.0.10"
   }
 }
