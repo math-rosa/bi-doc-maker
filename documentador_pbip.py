@@ -3354,6 +3354,8 @@ class DocumentadorPBIP:
         cor_primaria = self.branding.primary_color
         cor_secundaria = self.branding.secondary_color
         cor_clara = self.branding.light_color
+        fact_tables = self._tabelas_fato_mermaid()
+        fact_tables_js = json.dumps(fact_tables, ensure_ascii=True)
 
         css_style = """
         html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
