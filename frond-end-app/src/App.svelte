@@ -9,6 +9,7 @@
   type ThemeMode = "light" | "dark";
 
   type BrandingOptions = {
+    documentTitle: string;
     logoPath: string;
     primaryColor: string;
     secondaryColor: string;
@@ -38,6 +39,7 @@
   };
 
   const defaultBranding: BrandingOptions = {
+    documentTitle: "Documentação Power BI",
     logoPath: "",
     primaryColor: "#003D6B",
     secondaryColor: "#006DAA",
@@ -95,6 +97,7 @@
       try {
         const parsed = JSON.parse(storedBranding) as Partial<BrandingOptions>;
         branding = {
+          documentTitle: parsed.documentTitle ?? defaultBranding.documentTitle,
           logoPath: parsed.logoPath ?? "",
           primaryColor: parsed.primaryColor ?? defaultBranding.primaryColor,
           secondaryColor: parsed.secondaryColor ?? defaultBranding.secondaryColor,
@@ -322,6 +325,20 @@
             </label>
           {/each}
         </div>
+      </div>
+
+      <div class="option-group">
+        <h3>Título da documentação</h3>
+        <label class="text-field">
+          <span>Título exibido no documento</span>
+          <input
+            class="text-input"
+            type="text"
+            bind:value={branding.documentTitle}
+            placeholder="Documentação Power BI"
+            on:input={persistPreferences}
+          />
+        </label>
       </div>
 
       <div class="option-group">

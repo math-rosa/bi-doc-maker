@@ -377,6 +377,25 @@ h3 {
   margin-top: 22px;
 }
 
+.text-field {
+  display: grid;
+  gap: 8px;
+}
+
+.text-input {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid var(--input-border);
+  border-radius: 10px;
+  padding: 0 12px;
+  background: var(--input-bg);
+  color: var(--text);
+}
+
+.text-input::placeholder {
+  color: var(--muted);
+}
+
 .format-grid,
 .color-grid {
   display: grid;
