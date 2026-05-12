@@ -55,6 +55,7 @@ Write-Host "==> Gerando sidecar Python com PyInstaller"
     --clean `
     --noconfirm `
     --onefile `
+    --noupx `
     --name $SidecarName `
     --exclude-module playwright `
     --collect-all markdown `
