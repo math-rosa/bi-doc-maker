@@ -77,6 +77,7 @@ class InfoTabela:
     esta_oculta: bool = False
     excluida_refresh: bool = False
     descricao: Optional[str] = None
+    eh_fato: bool = False
     colunas: List[InfoColuna] = field(default_factory=list)
     medidas: List[InfoMedida] = field(default_factory=list)
     colunas_calculadas: List[InfoColunaCalculada] = field(default_factory=list)
@@ -1516,6 +1517,18 @@ def parse_tmdl_model(caminho: str) -> InfoModelo:
     return info
 
 
+def _is_fact_table(nome: str) -> bool:
+    if not nome:
+        return False
+
+    nome_norm = nome.strip().lower()
+    if re.search(r"(^|[^a-z0-9])(fato|fact|fat)([^a-z0-9]|$)", nome_norm):
+        return True
+    if re.search(r"(^|[^a-z0-9])f_", nome_norm):
+        return True
+    return False
+
+
 def parse_tmdl_table(caminho: str) -> Optional[InfoTabela]:
     """
     Parseia arquivo .tmdl de uma tabela.
@@ -1550,6 +1563,7 @@ def parse_tmdl_table(caminho: str) -> Optional[InfoTabela]:
         return None
 
     tabela = InfoTabela(nome=nome_tabela)
+    tabela.eh_fato = _is_fact_table(nome_tabela)
 
     # Parse linha por linha
     i = 0
@@ -2602,42 +2616,48 @@ class DocumentadorPBIP:
         self._dicionario_cache = dicionario
         return dicionario[:limite]
 
+    def _limpar_nome_mermaid(self, nome: str) -> str:
+        import re
+        resultado = re.sub(r'[^a-zA-Z0-9_]', '_', str(nome))
+        if resultado and resultado[0].isdigit():
+            resultado = "T_" + resultado
+        return resultado
+
+    def _tabelas_fato_mermaid(self) -> List[str]:
+        tabelas_fato = []
+        for tabela in self.tabelas:
+            if 'LocalDateTable' in tabela.nome or 'DateTableTemplate' in tabela.nome:
+                continue
+            if tabela.eh_fato:
+                tabelas_fato.append(self._limpar_nome_mermaid(tabela.nome))
+        return sorted(set(tabelas_fato))
+
     def _gerar_codigo_mermaid(self) -> str:
         """Gera o código do diagrama ER em formato Mermaid"""
         mermaid = ["erDiagram"]
-
-        # Função auxiliar para limpar nomes e evitar erros de sintaxe no Mermaid
-        def limpar_nome_mermaid(nome: str) -> str:
-            import re
-            # Substitui qualquer caractere que não seja letra, número ou underscore por _
-            resultado = re.sub(r'[^a-zA-Z0-9_]', '_', str(nome))
-            # Mermaid não aceita nomes que começam com número
-            if resultado and resultado[0].isdigit():
-                resultado = "T_" + resultado
-            return resultado
 
         # Adiciona definição das tabelas e colunas no diagrama
         for tabela in self.tabelas:
             # Omitir tabelas de calendário automáticas
             if 'LocalDateTable' in tabela.nome or 'DateTableTemplate' in tabela.nome:
                 continue
-            nome_tab = limpar_nome_mermaid(tabela.nome)
+            nome_tab = self._limpar_nome_mermaid(tabela.nome)
             mermaid.append(f"    {nome_tab} {{")
             # Limite de colunas para o diagrama não ficar gigantesco (Top 10)
             for col in tabela.colunas[:10]:
-                tipo = limpar_nome_mermaid(col.tipo_dado or "string")
-                nome_col = limpar_nome_mermaid(col.nome)
+                tipo = self._limpar_nome_mermaid(col.tipo_dado or "string")
+                nome_col = self._limpar_nome_mermaid(col.nome)
                 mermaid.append(f"        {tipo} {nome_col}")
             if len(tabela.colunas) > 10:
-                mermaid.append(f"        string outras_colunas_ocultas")
-            mermaid.append(f"    }}")
+                mermaid.append("        string outras_colunas_ocultas")
+            mermaid.append("    }")
 
         # Adiciona as ligações (relacionamentos)
         for rel in self.relacionamentos:
             if 'LocalDateTable' in rel.tabela_destino or 'DateTableTemplate' in rel.tabela_destino:
                 continue
-            tabela_origem = limpar_nome_mermaid(rel.tabela_origem)
-            tabela_destino = limpar_nome_mermaid(rel.tabela_destino)
+            tabela_origem = self._limpar_nome_mermaid(rel.tabela_origem)
+            tabela_destino = self._limpar_nome_mermaid(rel.tabela_destino)
             coluna_origem = rel.coluna_origem.replace("'", "")
 
             # }|--|| = muitos-para-um (bidirecional)  |  }o--|| = muitos-para-um (unidirecional)
@@ -2839,6 +2859,8 @@ class DocumentadorPBIP:
         cor_primaria = self.branding.primary_color
         cor_secundaria = self.branding.secondary_color
         cor_clara = self.branding.light_color
+        fact_tables = self._tabelas_fato_mermaid()
+        fact_tables_js = json.dumps(fact_tables, ensure_ascii=True)
         logo_data_uri = self._obter_logo_data_uri()
         logo_img = (
             f"<img src='{logo_data_uri}' width='80' height='80' "
@@ -3353,6 +3375,8 @@ class DocumentadorPBIP:
         :not(pre) > code { background-color: #F2F4F4 !important; color: #C0392B !important; padding: 2px 5px; border-radius: 4px; font-size: 9pt; }
         .language-mermaid { white-space: pre-wrap; word-wrap: break-word; font-family: 'Consolas', monospace; }
         .mermaid { display: flex; justify-content: center; margin: 2em 0; page-break-inside: avoid; }
+        .mermaid .fact-table rect { fill: #2980B9; stroke: #1A5276; stroke-width: 1.5px; }
+        .mermaid .fact-table text { fill: #FFFFFF; font-weight: 600; }
         .cover-page { display: flex; flex-direction: column; justify-content: center; align-items: center; min-height: 85vh; text-align: center; padding: 2em 0; }
         .cover-page h1.cover-title { font-size: 36pt; border-bottom: 3px solid #2980B9; padding-bottom: 0.4em; margin-bottom: 0.6em; color: #1A5276; }
         .cover-logo { margin-bottom: 1.5em; }
@@ -3396,6 +3420,7 @@ class DocumentadorPBIP:
             <script type="module">
                 import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
                 mermaid.initialize({{ startOnLoad: true, theme: 'default' }});
+                const factTables = new Set({fact_tables_js});
 
                 document.addEventListener("DOMContentLoaded", () => {{
                     document.querySelectorAll("code.language-mermaid").forEach(el => {{
@@ -3417,6 +3442,37 @@ class DocumentadorPBIP:
                     }});
 
                     hljs.highlightAll();
+
+                    if (factTables.size > 0) {{
+                        const applyFactHighlight = () => {{
+                            const entities = document.querySelectorAll(".mermaid svg g.entity");
+                            if (!entities.length) {{
+                                return false;
+                            }}
+                            entities.forEach(entity => {{
+                                const label = entity.querySelector("text");
+                                if (!label) {{
+                                    return;
+                                }}
+                                const name = (label.textContent || "").trim();
+                                if (factTables.has(name)) {{
+                                    entity.classList.add("fact-table");
+                                }}
+                            }});
+                            return true;
+                        }};
+
+                        const waitForMermaid = (attempt = 0) => {{
+                            if (applyFactHighlight()) {{
+                                return;
+                            }}
+                            if (attempt < 30) {{
+                                setTimeout(() => waitForMermaid(attempt + 1), 150);
+                            }}
+                        }};
+
+                        waitForMermaid();
+                    }}
                 }});
 
                 {print_script}
