@@ -1486,37 +1486,15 @@ def adicionar_linhagem_dax_markdown(
     nome_medida: Optional[str] = None,
     medidas_duplicadas: Optional[Dict[str, List[str]]] = None,
 ) -> None:
-    """Renderiza linhagem e avisos de qualidade da expressao DAX.
+    """Renderiza a linhagem (medidas referenciadas) de uma expressao DAX.
 
-    - Medidas referenciadas: nomes [X] que casam com medidas conhecidas do modelo.
-    - Avisos: tabelas referenciadas inexistentes no modelo + duplicatas.
+    Lista nomes [X] sem prefixo de tabela que casam com medidas conhecidas.
     """
     medidas_conhecidas = medidas_conhecidas or {}
-    tabelas_conhecidas = tabelas_conhecidas or set()
-    medidas_duplicadas = medidas_duplicadas or {}
-
     medidas_refs = [r for r in leitura.referencias_medidas if r in medidas_conhecidas]
-    tabelas_inexistentes = [
-        t for t in leitura.referencias_tabelas
-        if t not in tabelas_conhecidas
-    ]
-
     if medidas_refs:
         nomes = ", ".join(f"`[{m}]`" for m in medidas_refs)
         md.append(f"**Medidas referenciadas**: {nomes}")
-        md.append("")
-
-    avisos: List[str] = []
-    if tabelas_inexistentes:
-        lista = ", ".join(f"`{t}`" for t in tabelas_inexistentes)
-        avisos.append(f"Referencia tabela(s) que nao existem no modelo: {lista}")
-    if nome_medida and nome_medida in medidas_duplicadas:
-        irmaos = ", ".join(f"`{n}`" for n in medidas_duplicadas[nome_medida])
-        avisos.append(f"DAX identico ao de: {irmaos} (medidas duplicadas)")
-
-    if avisos:
-        for av in avisos:
-            md.append(f"> ⚠️ **Aviso de qualidade**: {av}")
         md.append("")
 
 
@@ -3602,24 +3580,11 @@ class DocumentadorPBIP:
                 md.append(f"| Nome | Tipo | Sumarização | Oculta |")
                 md.append(f"|:-----|:----:|:-----------:|:------:|")
 
-                colunas_alerta_sum_id: List[str] = []
                 for coluna in tabela.colunas:
                     oculta = "🔴" if coluna.esta_oculta else "⚪"
-                    aviso_sum = ""
-                    if (tabela.nome, coluna.nome) in {(t, c) for t, c in self.colunas_sum_em_id}:
-                        aviso_sum = " ⚠️"
-                        colunas_alerta_sum_id.append(coluna.nome)
-                    md.append(f"| `{coluna.nome}` | `{coluna.tipo_dado}` | {coluna.sumarizacao}{aviso_sum} | {oculta} |")
+                    md.append(f"| `{coluna.nome}` | `{coluna.tipo_dado}` | {coluna.sumarizacao} | {oculta} |")
 
                 md.append(f"")
-                if colunas_alerta_sum_id:
-                    nomes = ", ".join(f"`{n}`" for n in colunas_alerta_sum_id)
-                    md.append(
-                        f"> ⚠️ **Aviso de qualidade**: as colunas {nomes} parecem identificadores "
-                        f"mas estao com sumarizacao `sum`. Pode gerar totais sem sentido nos visuais "
-                        f"(considere alterar para `none` no Power BI Desktop)."
-                    )
-                    md.append(f"")
 
             # Colunas Calculadas - Resumo
             if tabela.colunas_calculadas:
