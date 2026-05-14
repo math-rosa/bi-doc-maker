@@ -234,17 +234,111 @@ fn open_output_file(path: String) -> Result<(), String> {
 #[tauri::command]
 fn open_external_url(url: String) -> Result<(), String> {
     let url = url.trim().to_string();
-    let allowed = [
+    let allowed_exact = [
         "https://www.linkedin.com/in/mathrosa96/",
-        "https://github.com/math-rosa/bi-doc-maker",
         "https://nubank.com.br/cobrar/5iu9s/69ff8e6c-3a76-4fa3-9a60-d3b2e1e8885c",
     ];
+    let allowed_prefixes = [
+        // Qualquer recurso do proprio repo: releases, issues, discussions, etc.
+        "https://github.com/math-rosa/bi-doc-maker",
+        // Site institucional
+        "https://math-rosa.github.io/bi-doc-maker",
+    ];
 
-    if !allowed.iter().any(|allowed_url| url == *allowed_url) {
+    let is_allowed = allowed_exact.iter().any(|allowed_url| url == *allowed_url)
+        || allowed_prefixes.iter().any(|prefix| url.starts_with(prefix));
+
+    if !is_allowed {
         return Err("Link externo nao permitido.".to_string());
     }
 
     open_cross_platform(url)
+}
+
+#[derive(Serialize)]
+struct UpdateCheckResult {
+    has_update: bool,
+    current_version: String,
+    latest_version: String,
+    release_name: String,
+    release_url: String,
+    release_notes: String,
+    published_at: String,
+}
+
+#[derive(serde::Deserialize)]
+struct GitHubRelease {
+    tag_name: String,
+    name: Option<String>,
+    body: Option<String>,
+    html_url: String,
+    published_at: Option<String>,
+    prerelease: bool,
+    draft: bool,
+}
+
+#[tauri::command]
+async fn check_for_updates(current_version: String) -> Result<UpdateCheckResult, String> {
+    const RELEASES_URL: &str =
+        "https://api.github.com/repos/math-rosa/bi-doc-maker/releases/latest";
+
+    let client = reqwest::Client::builder()
+        .user_agent(concat!("BI-Doc-Maker/", env!("CARGO_PKG_VERSION")))
+        .timeout(std::time::Duration::from_secs(8))
+        .build()
+        .map_err(|e| format!("Falha ao criar cliente HTTP: {e}"))?;
+
+    let response = client
+        .get(RELEASES_URL)
+        .header("Accept", "application/vnd.github+json")
+        .send()
+        .await
+        .map_err(|e| format!("Falha ao consultar GitHub: {e}"))?;
+
+    if !response.status().is_success() {
+        return Err(format!(
+            "GitHub retornou status {}",
+            response.status().as_u16()
+        ));
+    }
+
+    let release: GitHubRelease = response
+        .json()
+        .await
+        .map_err(|e| format!("Falha ao parsear resposta do GitHub: {e}"))?;
+
+    if release.draft || release.prerelease {
+        return Ok(UpdateCheckResult {
+            has_update: false,
+            current_version,
+            latest_version: release.tag_name.clone(),
+            release_name: release.name.unwrap_or_default(),
+            release_url: release.html_url,
+            release_notes: release.body.unwrap_or_default(),
+            published_at: release.published_at.unwrap_or_default(),
+        });
+    }
+
+    let latest_tag = release.tag_name.trim_start_matches('v').to_string();
+    let current_trim = current_version.trim_start_matches('v').to_string();
+
+    let has_update = match (
+        semver::Version::parse(&latest_tag),
+        semver::Version::parse(&current_trim),
+    ) {
+        (Ok(latest), Ok(current)) => latest > current,
+        _ => false,
+    };
+
+    Ok(UpdateCheckResult {
+        has_update,
+        current_version: current_trim,
+        latest_version: latest_tag,
+        release_name: release.name.unwrap_or_default(),
+        release_url: release.html_url,
+        release_notes: release.body.unwrap_or_default(),
+        published_at: release.published_at.unwrap_or_default(),
+    })
 }
 
 async fn run_core_async(args: Vec<String>) -> Result<Value, String> {
@@ -316,7 +410,8 @@ fn main() {
             open_output_folder,
             open_output_file,
             open_external_url,
-            scan_pbip_projects
+            scan_pbip_projects,
+            check_for_updates
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

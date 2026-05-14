@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import { open as openDialog } from "@tauri-apps/api/dialog";
   import { invoke } from "@tauri-apps/api/tauri";
+  import { getVersion } from "@tauri-apps/api/app";
   import { z } from "zod";
 
   type OutputFormat = "md" | "docx" | "html";
@@ -32,6 +33,17 @@
 
   type PbipEntry = z.infer<typeof PbipEntrySchema>;
   type ProjectStatus = "idle" | "running" | "ok" | "error";
+
+  const UpdateInfoSchema = z.object({
+    has_update: z.boolean(),
+    current_version: z.string(),
+    latest_version: z.string(),
+    release_name: z.string(),
+    release_url: z.string(),
+    release_notes: z.string(),
+    published_at: z.string()
+  });
+  type UpdateInfo = z.infer<typeof UpdateInfoSchema>;
 
   const outputFormats: OutputFormat[] = ["md", "docx", "html"];
   const formatLabels: Record<OutputFormat, string> = {
@@ -78,6 +90,7 @@
   let theme: ThemeMode = "light";
   let selectedFormats: Record<OutputFormat, boolean> = { ...defaultFormats };
   let branding: BrandingOptions = { ...defaultBranding };
+  let updateInfo: UpdateInfo | null = null;
 
   $: activeFormats = outputFormats.filter((format) => selectedFormats[format]);
   $: selectedProjectsList = projects.filter((p) => selections[p.path]);
@@ -151,19 +164,54 @@
     }
   };
 
+  const checkForUpdates = async () => {
+    try {
+      const currentVersion = await getVersion();
+      const raw = await invoke("check_for_updates", { currentVersion });
+      const parsed = UpdateInfoSchema.parse(raw);
+      if (!parsed.has_update) return;
+
+      const dismissed = localStorage.getItem("bi-doc-maker-dismissed-update");
+      if (dismissed === parsed.latest_version) return;
+
+      updateInfo = parsed;
+    } catch {
+      // Silenciosamente ignora falhas (offline, GitHub fora do ar, rate limit).
+    }
+  };
+
+  const dismissUpdate = () => {
+    if (updateInfo) {
+      localStorage.setItem("bi-doc-maker-dismissed-update", updateInfo.latest_version);
+      updateInfo = null;
+    }
+  };
+
+  const openUpdateRelease = async () => {
+    if (!updateInfo) return;
+    try {
+      await invoke("open_external_url", { url: updateInfo.release_url });
+    } catch (error) {
+      errorMessage = `Nao foi possivel abrir a release: ${String(error)}`;
+    }
+  };
+
   onMount(() => {
     loadPreferences();
 
     const storedTheme = localStorage.getItem("bi-doc-maker-theme");
     if (storedTheme === "light" || storedTheme === "dark") {
       applyTheme(storedTheme);
-      return;
+    }
+    else {
+      const systemTheme = window.matchMedia("(prefers-color-scheme: dark)").matches
+        ? "dark"
+        : "light";
+      applyTheme(systemTheme);
     }
 
-    const systemTheme = window.matchMedia("(prefers-color-scheme: dark)").matches
-      ? "dark"
-      : "light";
-    applyTheme(systemTheme);
+    // Verifica atualizacoes em background (nao bloqueia UI).
+    checkForUpdates();
   });
 
   const toggleTheme = () => {
@@ -441,6 +489,29 @@
         </button>
       </nav>
     </header>
+
+    {#if updateInfo}
+      <aside class="update-banner" role="status" aria-live="polite">
+        <span class="update-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 3v12m0 0 4-4m-4 4-4-4"/>
+            <path d="M5 21h14"/>
+          </svg>
+        </span>
+        <div class="update-text">
+          <strong>Atualização disponível: v{updateInfo.latest_version}</strong>
+          <span>Você está na v{updateInfo.current_version}. Veja as novidades e baixe na página da release.</span>
+        </div>
+        <div class="update-actions">
+          <button type="button" class="update-primary" on:click={openUpdateRelease}>
+            Ver atualização
+          </button>
+          <button type="button" class="update-dismiss" on:click={dismissUpdate} title="Ignorar esta versão" aria-label="Ignorar esta atualização">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          </button>
+        </div>
+      </aside>
+    {/if}
 
     <div class="content">
       {#if !selectedPath}

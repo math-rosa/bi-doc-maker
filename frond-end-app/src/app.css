@@ -247,6 +247,143 @@ body {
   fill: currentColor;
 }
 
+/* === Update banner (atualizacao disponivel) === */
+.update-banner {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px 10px 14px;
+  border: 1px solid rgba(47, 111, 165, 0.32);
+  border-radius: 12px;
+  background: linear-gradient(
+    180deg,
+    rgba(47, 111, 165, 0.08),
+    rgba(47, 111, 165, 0.04)
+  );
+  color: var(--text);
+  animation: update-slide-in 280ms ease-out;
+}
+
+:root[data-theme="dark"] .update-banner {
+  border-color: rgba(123, 179, 229, 0.34);
+  background: linear-gradient(
+    180deg,
+    rgba(123, 179, 229, 0.1),
+    rgba(123, 179, 229, 0.04)
+  );
+}
+
+@keyframes update-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.update-icon {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background: rgba(47, 111, 165, 0.14);
+  color: var(--primary-bg);
+}
+
+:root[data-theme="dark"] .update-icon {
+  background: rgba(123, 179, 229, 0.18);
+  color: var(--primary-bg);
+}
+
+.update-icon svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+}
+
+.update-text {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+
+.update-text strong {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: -0.005em;
+}
+
+.update-text span {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.update-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.update-primary {
+  min-height: 32px;
+  padding: 0 14px;
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 8px;
+  background: var(--primary-bg);
+  color: var(--primary-text);
+  border: 1px solid var(--primary-bg);
+}
+
+.update-primary:hover:not(:disabled) {
+  background: var(--primary-hover);
+  border-color: var(--primary-hover);
+}
+
+.update-dismiss {
+  width: 32px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--muted);
+}
+
+.update-dismiss:hover:not(:disabled) {
+  background: var(--button-bg);
+  border-color: var(--button-border);
+  color: var(--text);
+}
+
+.update-dismiss svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+}
+
 /* === Content area (fills viewport between topbar and action bar) === */
 .content {
   flex: 1;
@@ -1326,6 +1463,14 @@ h3 {
 
   .action-bar .action-button {
     width: 100%;
+  }
+
+  .update-banner {
+    flex-wrap: wrap;
+  }
+
+  .update-text {
+    flex-basis: 100%;
   }
 
   .input-row {
