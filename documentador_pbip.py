@@ -1429,6 +1429,125 @@ def regra_power_query_tem_conteudo(regra: RegraPowerQuery) -> bool:
     ])
 
 
+_MEDIDA_TIPO_MOEDA_RE = re.compile(
+    r"\b(valor|receita|custo|faturamento|fatur|venda|saldo|pago|d[eé]bito|debito|credito|cr[eé]dito|"
+    r"pre[cç]o|preco|despesa|gasto|or[cç]ado|amortiz|recupera|montante|capital|"
+    r"reservad|empenh|nota[_ ]?fiscal|aporte|aliena|opera[cç][aã]o)",
+    re.I,
+)
+_MEDIDA_TIPO_PCT_NOME_RE = re.compile(
+    r"(^\s*%|\bpct\b|\bpercentual\b|\b[ií]ndice\b|\btaxa\b|\bratio\b)",
+    re.I,
+)
+_MEDIDA_TIPO_CONTAGEM_NOME_RE = re.compile(
+    r"\b(qtde|quantidade|n[uú]m\b|num[_ ]?|count|contagem|contad|total[_ ]?registros?)",
+    re.I,
+)
+
+
+def inferir_tipo_medida(nome: str, dax: str, leitura: LeituraDax) -> str:
+    """Heuristica conservadora para inferir o tipo de uma medida DAX.
+
+    Retorna uma das categorias: "Percentual", "Contagem", "Moeda", "Media",
+    "Soma", "Extremo", "Numerico". Designed to FAIL CLOSED — quando ambiguo,
+    cai em "Numerico" em vez de chutar errado.
+    """
+    nome = nome or ""
+    dax = dax or ""
+    # Normaliza underscore como separador para que \b casar em Total_Pago, etc.
+    nome_norm = nome.replace("_", " ")
+    funcoes = {f.upper() for f in (leitura.funcoes or [])}
+
+    # 1) Percentual: nome com %, palavras-chave, ou FORMAT com % no DAX
+    if _MEDIDA_TIPO_PCT_NOME_RE.search(nome_norm):
+        return "Percentual"
+    if re.search(r'FORMAT\s*\([^)]+?["\']\s*[#0,.\s]*%', dax):
+        return "Percentual"
+
+    # 2) Contagem: funcoes de count ou nome explicito
+    if "DISTINCTCOUNT" in funcoes or "COUNTROWS" in funcoes or "COUNTA" in funcoes:
+        return "Contagem"
+    if _MEDIDA_TIPO_CONTAGEM_NOME_RE.search(nome_norm):
+        return "Contagem"
+
+    # 3) Moeda: nome com palavras-chave fortes
+    if _MEDIDA_TIPO_MOEDA_RE.search(nome_norm):
+        return "Moeda"
+
+    # 4) Media: AVERAGE/AVERAGEX ou nome com "media"
+    if "AVERAGE" in funcoes or "AVERAGEX" in funcoes:
+        return "Media"
+    if re.search(r"\bm[eé]dia\b|\baverage\b", nome_norm, re.I):
+        return "Media"
+
+    # 5) Soma generica
+    if "SUM" in funcoes or "SUMX" in funcoes:
+        return "Soma"
+
+    # 6) Min/Max sem outra qualificacao
+    if "MIN" in funcoes or "MAX" in funcoes:
+        return "Extremo"
+
+    return "Numerico"
+
+
+# Mapeamento singular/plural para o sumario de etapas Power Query
+_POWER_QUERY_ETAPA_PLURAIS = {
+    "Fonte": ("fonte", "fontes"),
+    "Tipagem": ("tipagem", "tipagens"),
+    "Filtro": ("filtro", "filtros"),
+    "Renomeação": ("renomeação", "renomeações"),
+    "Seleção de Colunas": ("seleção de colunas", "seleções de colunas"),
+    "Remoção de Colunas": ("remoção de colunas", "remoções de colunas"),
+    "Coluna Calculada": ("coluna calculada", "colunas calculadas"),
+    "Coluna Condicional": ("coluna condicional", "colunas condicionais"),
+    "Merge / Junção": ("junção", "junções"),
+    "Append": ("append", "appends"),
+    "Expansão": ("expansão", "expansões"),
+    "Agrupamento": ("agrupamento", "agrupamentos"),
+    "Pivot": ("pivot", "pivots"),
+    "Unpivot": ("unpivot", "unpivots"),
+    "Ordenação": ("ordenação", "ordenações"),
+    "Deduplicação": ("deduplicação", "deduplicações"),
+    "Substituição de Valores": ("substituição de valores", "substituições de valores"),
+    "Cabeçalhos": ("ajuste de cabeçalho", "ajustes de cabeçalho"),
+    "Tratamento de Erros": ("tratamento de erros", "tratamentos de erros"),
+    "Tratamento de Erro": ("tratamento de erro", "tratamentos de erro"),
+    "Recorte de Linhas": ("recorte de linhas", "recortes de linhas"),
+    "Regra Condicional": ("regra condicional", "regras condicionais"),
+    "Transformação Personalizada": ("transformação personalizada", "transformações personalizadas"),
+}
+
+
+def _resumir_etapas_power_query(linhas: List["LinhaRegraPowerQuery"]) -> str:
+    """Conta etapas por categoria e retorna texto resumido para cabecalho.
+
+    Ex.: '1 fonte, 4 tipagens, 6 colunas calculadas, 1 filtro, 1 append'.
+    """
+    if not linhas:
+        return ""
+
+    contagem: Dict[str, int] = {}
+    ordem: List[str] = []
+    for linha in linhas:
+        etapa = (linha.etapa or "").strip()
+        if not etapa:
+            continue
+        if etapa not in contagem:
+            ordem.append(etapa)
+        contagem[etapa] = contagem.get(etapa, 0) + 1
+
+    partes: List[str] = []
+    for etapa in ordem:
+        count = contagem[etapa]
+        singular, plural = _POWER_QUERY_ETAPA_PLURAIS.get(
+            etapa, (etapa.lower(), etapa.lower())
+        )
+        nome = plural if count > 1 else singular
+        partes.append(f"{count} {nome}")
+    return ", ".join(partes)
+
+
 def adicionar_regra_power_query_markdown(md: List[str], regra: RegraPowerQuery) -> None:
     if not regra_power_query_tem_conteudo(regra):
         return
@@ -1464,6 +1583,10 @@ def adicionar_regra_power_query_markdown(md: List[str], regra: RegraPowerQuery) 
         md.append("")
 
     if regra.linhas_regra:
+        resumo = _resumir_etapas_power_query(regra.linhas_regra)
+        if resumo:
+            md.append(f"**Esta tabela aplica**: {resumo}.")
+            md.append("")
         md.append("**Regras de Negócio e Filtros — Power Query**")
         md.append("")
         md.append("| Etapa | Regra / Filtro | Descrição |")
@@ -1482,9 +1605,6 @@ def adicionar_linhagem_dax_markdown(
     md: List[str],
     leitura: LeituraDax,
     medidas_conhecidas: Optional[Dict[str, str]] = None,
-    tabelas_conhecidas: Optional[set] = None,
-    nome_medida: Optional[str] = None,
-    medidas_duplicadas: Optional[Dict[str, List[str]]] = None,
 ) -> None:
     """Renderiza a linhagem (medidas referenciadas) de uma expressao DAX.
 
@@ -2223,68 +2343,22 @@ class DocumentadorPBIP:
         # Totaliza visuais a partir das páginas processadas
         self.total_visuais = sum(len(p.visuais) for p in self.paginas)
 
-        # Indexa medidas/tabelas e detecta problemas de qualidade
-        self._analisar_qualidade_modelo()
+        # Indexa medidas para uso na linhagem (Medidas referenciadas)
+        self._indexar_medidas()
 
         print("[OK] Extração concluída!\n")
 
-    def _analisar_qualidade_modelo(self):
-        """Indexa medidas/tabelas e detecta avisos de qualidade do modelo.
+    def _indexar_medidas(self):
+        """Constroi medidas_index: nome_medida -> nome_tabela.
 
-        Constroi:
-        - medidas_index: nome_medida -> nome_tabela (dono da medida)
-        - tabelas_set: set de nomes de tabela conhecidos
-        - medidas_duplicadas: chave_dax_normalizado -> [nomes_medidas]
-        - colunas_sum_em_id: [(tabela, coluna)] com sumarizacao 'sum' em identificadores
+        Usado pela linhagem DAX (`adicionar_linhagem_dax_markdown`) para filtrar
+        candidatos `[X]` extraidos via regex apenas para medidas realmente
+        existentes no modelo.
         """
         self.medidas_index: Dict[str, str] = {}
-        self.tabelas_set: set = set()
-        self.medidas_duplicadas: Dict[str, List[str]] = {}
-        self.colunas_sum_em_id: List[Tuple[str, str]] = []
-
-        # Indices basicos
         for tabela in self.tabelas:
-            self.tabelas_set.add(tabela.nome)
             for medida in tabela.medidas:
                 self.medidas_index[medida.nome] = tabela.nome
-
-        # Duplicatas: normaliza DAX (remove whitespace) e agrupa
-        dax_groups: Dict[str, List[str]] = {}
-        for tabela in self.tabelas:
-            for medida in tabela.medidas:
-                dax = (medida.expressao_dax or "").strip()
-                if not dax:
-                    continue
-                # Normaliza: remove comentarios de linha, colapsa whitespace
-                norm = re.sub(r"//[^\n]*", "", dax)
-                norm = re.sub(r"/\*.*?\*/", "", norm, flags=re.DOTALL)
-                norm = re.sub(r"\s+", " ", norm).strip()
-                # Ignora DAX triviais (1 token) para evitar falso positivo
-                if len(norm) < 15:
-                    continue
-                dax_groups.setdefault(norm, []).append(medida.nome)
-
-        for norm, nomes in dax_groups.items():
-            if len(nomes) >= 2:
-                for nome in nomes:
-                    self.medidas_duplicadas[nome] = [n for n in nomes if n != nome]
-
-        # Sumarizacao 'sum' em colunas-identificador (heuristica por nome)
-        ID_PATTERNS = (
-            re.compile(r"^(ID|CODIGO|CD|KEY|CHAVE)$", re.I),
-            re.compile(r"_(ID|CD|NR|KEY|COD|CODIGO)$", re.I),
-            re.compile(r"^(KEY|CD|ID|COD)_", re.I),
-            re.compile(r"^CONTRATO$", re.I),
-            re.compile(r"^ALIENACAO$", re.I),
-        )
-        for tabela in self.tabelas:
-            for coluna in tabela.colunas:
-                summarize = (getattr(coluna, 'sumarizacao', '') or '').lower()
-                if summarize != 'sum':
-                    continue
-                nome = coluna.nome
-                if any(p.search(nome) for p in ID_PATTERNS):
-                    self.colunas_sum_em_id.append((tabela.nome, nome))
 
     def _obter_pasta_modelo(self) -> Path:
         """Retorna o caminho da pasta do modelo conforme o layout"""
@@ -3051,6 +3125,7 @@ class DocumentadorPBIP:
 
     def _gerar_codigo_mermaid(self) -> str:
         """Gera o código do diagrama ER em formato Mermaid"""
+        LIMITE_COLUNAS_ER = 12
         mermaid = ["erDiagram"]
 
         # Adiciona definição das tabelas e colunas no diagrama
@@ -3060,12 +3135,17 @@ class DocumentadorPBIP:
                 continue
             nome_tab = self._limpar_nome_mermaid(tabela.nome)
             mermaid.append(f"    {nome_tab} {{")
-            # Limite de colunas no diagrama (top 12 para nao ficar gigantesco).
-            # Se houver mais, omite silenciosamente (lista completa esta no detalhamento).
-            for col in tabela.colunas[:12]:
+            # Limite de colunas no diagrama (top N para nao ficar gigantesco).
+            # Se houver mais, sinaliza com pseudo-linha; lista completa fica
+            # no detalhamento de cada tabela mais abaixo no documento.
+            for col in tabela.colunas[:LIMITE_COLUNAS_ER]:
                 tipo = self._limpar_nome_mermaid(col.tipo_dado or "string")
                 nome_col = self._limpar_nome_mermaid(col.nome)
                 mermaid.append(f"        {tipo} {nome_col}")
+            restantes = len(tabela.colunas) - LIMITE_COLUNAS_ER
+            if restantes > 0:
+                sufixo = "coluna" if restantes == 1 else "colunas"
+                mermaid.append(f"        string mais_{restantes}_{sufixo}_omitidas")
             mermaid.append("    }")
 
         # Adiciona as ligações (relacionamentos)
@@ -3247,6 +3327,42 @@ class DocumentadorPBIP:
             and not r.tabela_origem.startswith(TECNICAS)
         ]
 
+    @staticmethod
+    def _classificar_tabela(nome: str) -> str:
+        """Classifica tabela como 'fato', 'dimensao' ou 'outra' a partir do prefixo do nome."""
+        n = (nome or "").lower()
+        if n.startswith(("fat_", "fct_", "fact_")):
+            return "fato"
+        if n.startswith(("dim_", "d_")):
+            return "dimensao"
+        return "outra"
+
+    def _resumo_modelo_dimensional(self) -> str:
+        """Texto resumido do modelo: 'N fatos × M dimensoes + K auxiliares'.
+
+        Retorna string vazia quando nao detecta convencao fat_/dim_ (modelo nao
+        e star schema explicito; sumario seria enganoso).
+        """
+        fatos = sum(1 for t in self.tabelas if self._classificar_tabela(t.nome) == "fato")
+        dims = sum(1 for t in self.tabelas if self._classificar_tabela(t.nome) == "dimensao")
+        outras = len(self.tabelas) - fatos - dims
+
+        if fatos == 0 and dims == 0:
+            return ""
+
+        def plural(n: int, singular: str, plural_: str) -> str:
+            return f"**{n}** {plural_ if n != 1 else singular}"
+
+        partes: List[str] = []
+        if fatos:
+            partes.append(plural(fatos, "fato", "fatos"))
+        if dims:
+            partes.append(plural(dims, "dimensão", "dimensões"))
+        texto = " × ".join(partes)
+        if outras:
+            texto += f" + {plural(outras, 'auxiliar', 'auxiliares')}"
+        return texto
+
     def gerar_documentacao(self) -> str:
         """
         Gera a documentação em Markdown.
@@ -3361,6 +3477,10 @@ class DocumentadorPBIP:
         md.append(f"|:----------:|:----------:|:----------:|:-------------:|:-----------------:|:----------:|")
         md.append(f"| **{len(self.tabelas)}** | **{total_medidas}** | **{total_colunas}** | **{total_calc}** | **{len(rel_validos_visao)}** | **{len(self.paginas)}** |")
         md.append(f"")
+        resumo_dim = self._resumo_modelo_dimensional()
+        if resumo_dim:
+            md.append(f"**Modelo dimensional**: {resumo_dim}.")
+            md.append(f"")
         md.append(f"---")
         md.append(f"")
 
@@ -3621,7 +3741,6 @@ class DocumentadorPBIP:
                         md,
                         leitura_col,
                         medidas_conhecidas=self.medidas_index,
-                        tabelas_conhecidas=self.tabelas_set,
                     )
                     md.append(f"```dax")
                     # Verifica se a expressão DAX está vazia ou None
@@ -3638,11 +3757,16 @@ class DocumentadorPBIP:
             if tabela.medidas:
                 md.append(f"#### Medidas (Resumo)")
                 md.append(f"")
-                md.append(f"| Nome |")
-                md.append(f"|------|")
+                md.append(f"| Nome | Tipo |")
+                md.append(f"|------|------|")
 
                 for medida in tabela.medidas:
-                    md.append(f"| {medida.nome} |")
+                    tipo_medida = inferir_tipo_medida(
+                        medida.nome,
+                        medida.expressao_dax or "",
+                        analisar_dax(medida.expressao_dax or ""),
+                    )
+                    md.append(f"| {medida.nome} | {tipo_medida} |")
 
                 md.append(f"")
 
@@ -3664,9 +3788,6 @@ class DocumentadorPBIP:
                         md,
                         leitura_medida,
                         medidas_conhecidas=self.medidas_index,
-                        tabelas_conhecidas=self.tabelas_set,
-                        nome_medida=medida.nome,
-                        medidas_duplicadas=self.medidas_duplicadas,
                     )
                     md.append(f"```dax")
                     # Verifica se a expressão DAX está vazia ou None
@@ -4373,6 +4494,14 @@ class DocumentadorPBIP:
                 _add_bullet_list("Observações Documentadas", itens_doc)
 
             if regra.linhas_regra:
+                resumo = _resumir_etapas_power_query(regra.linhas_regra)
+                if resumo:
+                    p_resumo = doc.add_paragraph()
+                    run_lbl = p_resumo.add_run("Esta tabela aplica: ")
+                    run_lbl.bold = True
+                    p_resumo.add_run(f"{resumo}.")
+                    p_resumo.paragraph_format.space_before = Pt(4)
+                    p_resumo.paragraph_format.space_after = Pt(4)
                 h_regras = doc.add_heading("Regras de Negócio e Filtros — Power Query", level=4)
                 h_regras.paragraph_format.space_before = Pt(4)
                 linhas_agrupadas = _agrupar_linhas_regra_consecutivas(regra.linhas_regra)
@@ -4687,6 +4816,20 @@ class DocumentadorPBIP:
             run_lbl = p_lbl.add_run(label)
             _set_run_font(run_lbl, FONT_MAIN, FONT_TABLE, AZUL_SEC, bold=True)
 
+        # Resumo do modelo dimensional (apenas quando ha convencao fat_/dim_)
+        resumo_dim = self._resumo_modelo_dimensional()
+        if resumo_dim:
+            p_dim = doc.add_paragraph()
+            p_dim.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            p_dim.paragraph_format.space_before = Pt(10)
+            p_dim.paragraph_format.space_after = Pt(4)
+            run_dim_lbl = p_dim.add_run("Modelo dimensional: ")
+            _set_run_font(run_dim_lbl, FONT_MAIN, FONT_TABLE, AZUL_PRI, bold=True)
+            # _resumo_modelo_dimensional retorna markdown com **; converte para texto puro
+            texto_limpo = resumo_dim.replace("**", "")
+            run_dim_val = p_dim.add_run(f"{texto_limpo}.")
+            _set_run_font(run_dim_val, FONT_MAIN, FONT_TABLE, CINZA_LT)
+
         if dicionario_dados:
             _add_separator()
             doc.add_heading("Dicionário de Dados e Termos", level=1)
@@ -4893,9 +5036,16 @@ class DocumentadorPBIP:
                 h = doc.add_heading("Medidas DAX", level=3)
                 h.paragraph_format.space_before = Pt(8)
 
-                # Tabela resumo
-                rows_med = [[m.nome] for m in tabela.medidas]
-                _add_table(["Nome da Medida"], rows_med, compact=True)
+                # Tabela resumo (Nome + Tipo inferido)
+                rows_med = []
+                for m in tabela.medidas:
+                    tipo_med = inferir_tipo_medida(
+                        m.nome,
+                        m.expressao_dax or "",
+                        analisar_dax(m.expressao_dax or ""),
+                    )
+                    rows_med.append([m.nome, tipo_med])
+                _add_table(["Nome da Medida", "Tipo"], rows_med, compact=True)
 
                 # Código de cada medida
                 h_cod = doc.add_heading("Código das Medidas", level=4)
