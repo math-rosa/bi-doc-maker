@@ -8,7 +8,7 @@
   },
   "package": {
     "productName": "BI Doc Maker",
-    "version": "0.4.0"
+    "version": "0.6.0"
   },
   "tauri": {
     "allowlist": {
@@ -30,6 +30,10 @@
       "active": true,
       "identifier": "com.mathrosa.bidocmaker",
       "icon": [
+        "icons/32x32.png",
+        "icons/128x128.png",
+        "icons/128x128@2x.png",
+        "icons/icon.icns",
         "icons/icon.ico"
       ],
       "targets": [

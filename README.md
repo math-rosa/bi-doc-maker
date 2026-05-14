@@ -15,28 +15,31 @@ O produto combina uma interface Tauri + Svelte com um core Python empacotado com
 ## Recursos
 
 - Análise local de projetos Power BI `.pbip`.
+- **Modo lote**: selecione uma pasta-pai, o app varre subpastas e lista todos os PBIPs encontrados — escolha quais documentar de uma vez só.
+- **Busca/filtro** na lista de projetos por nome ou caminho (essencial quando há muitos PBIPs).
+- **Status em tempo real** durante a geração em lote: cada projeto mostra OK ou erro com tooltip explicando a falha.
 - Exportação para Markdown (`.md`), Word (`.docx`) e HTML imprimível.
 - HTML aberto no navegador padrão para o usuário salvar como PDF.
 - Documentação DOCX com visual padronizado, capa, sumário, tabelas refinadas e blocos de código com destaque de sintaxe.
 - Personalização da documentação com título, logo da empresa e cores.
+- Pasta de saída configurável (em **Mais Opções**); em lote, todos compartilham uma única pasta.
 - Regra de negócio inferida a partir de etapas Power Query M.
 - Comentários especiais `BI_DOC` no Power Query tratados como documentação oficial.
 - Leitura técnica offline para expressões DAX.
 - Dicionário de dados e termos inferido a partir dos metadados do PBIP.
 - Diagrama Mermaid nos formatos Markdown e HTML.
 - Lista tabular de relacionamentos no Word.
-- Interface com modo claro e escuro.
+- Interface modernizada com modo claro/escuro, foco visível e tecla Escape para fechar diálogos.
 - Saída organizada automaticamente em uma pasta `Doc_BI`.
 - Produto Windows sem exigir Python instalado na máquina do cliente.
 
 ## Como Usar
 
 1. Abra o BI Doc Maker.
-2. Selecione a pasta do projeto Power BI `.pbip`.
-3. Selecione a pasta de saída.
-4. Marque os formatos desejados: Markdown, Word e/ou HTML / Salvar PDF.
-5. Opcionalmente, personalize título, logo e cores da documentação.
-6. Clique em **Gerar documentação**.
+2. Selecione uma pasta. O app **varre subpastas** procurando projetos Power BI e lista todos os PBIPs encontrados.
+3. Marque os projetos para os quais deseja gerar documentação (use *Marcar todos* / *Limpar* quando houver vários).
+4. (Opcional) Em **Mais Opções**, escolha a pasta de saída, os formatos desejados, título, logo e cores. Sem configurar, a documentação de cada projeto é salva dentro do próprio projeto.
+5. Clique em **Gerar Documentação**. O processamento percorre os projetos selecionados um a um, mostrando status (OK / ERRO) ao lado de cada item.
 
 Os arquivos são salvos em:
 
@@ -44,7 +47,12 @@ Os arquivos são salvos em:
 <pasta-de-saida>\Doc_BI\
 ```
 
-Quando o formato HTML for selecionado, o app abre o arquivo no navegador padrão. A partir dele, use a impressão do navegador para salvar como PDF.
+Regras de saída:
+
+- **Lote (2 ou mais projetos)**: todos compartilham uma única pasta `Doc_BI`. Sem configurar, é a própria pasta selecionada (raiz da varredura). Configurando em **Mais Opções → Pasta de saída**, vai para a pasta escolhida. Os arquivos ficam nomeados como `<Projeto>_documentacao.{md,docx,html}`.
+- **Único projeto**: usa a pasta de saída se configurada, senão a pasta do próprio projeto.
+
+Se selecionar apenas um projeto e o formato HTML estiver marcado, ele abre automaticamente no navegador ao terminar — a partir dele, use a impressão do navegador para salvar como PDF.
 
 ## Arquivos Gerados
 
@@ -213,8 +221,7 @@ npm.cmd run build
 ├─ documentador_pbip.py              # Core de análise e geração
 ├─ documentador_core_cli.py          # CLI usada como sidecar
 ├─ build-windows.ps1                 # Build oficial Windows
-├─ assets/                           # Logo padrão
-├─ frond-end-app/                    # App Tauri + Svelte
+├─ frond-end-app/                    # App Tauri + Svelte (logo SVG em src/assets/)
 └─ website/                          # Site institucional
 ```
 

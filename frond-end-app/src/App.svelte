@@ -3,7 +3,6 @@
   import { open as openDialog } from "@tauri-apps/api/dialog";
   import { invoke } from "@tauri-apps/api/tauri";
   import { z } from "zod";
-  import logoUrl from "./assets/bi-doc-maker-logo.png";
 
   type OutputFormat = "md" | "docx" | "html";
   type ThemeMode = "light" | "dark";
@@ -24,6 +23,15 @@
   });
 
   type CoreResult = z.infer<typeof CoreResultSchema>;
+
+  const PbipEntrySchema = z.object({
+    name: z.string(),
+    path: z.string()
+  });
+  const PbipEntryArraySchema = z.array(PbipEntrySchema);
+
+  type PbipEntry = z.infer<typeof PbipEntrySchema>;
+  type ProjectStatus = "idle" | "running" | "ok" | "error";
 
   const outputFormats: OutputFormat[] = ["md", "docx", "html"];
   const formatLabels: Record<OutputFormat, string> = {
@@ -53,7 +61,17 @@
   };
 
   let selectedPath = "";
-  let exportResult: CoreResult | null = null;
+  let outputPath = "";
+  let searchQuery = "";
+  let projects: PbipEntry[] = [];
+  let selections: Record<string, boolean> = {};
+  let projectStatus: Record<string, ProjectStatus> = {};
+  let projectErrors: Record<string, string> = {};
+  let projectOutputs: Record<string, Record<string, string>> = {};
+  let isScanning = false;
+  let scanCompleted = false;
+  let currentProjectName = "";
+  let batchSummary: { ok: number; error: number; total: number } | null = null;
   let errorMessage = "";
   let isExporting = false;
   let showOptions = false;
@@ -62,9 +80,27 @@
   let branding: BrandingOptions = { ...defaultBranding };
 
   $: activeFormats = outputFormats.filter((format) => selectedFormats[format]);
-  $: hasSelectedProject = Boolean(selectedPath);
-  $: canExport = hasSelectedProject && activeFormats.length > 0 && !isExporting;
-  $: selectedProjectLabel = selectedPath || "Nenhuma pasta PBIP selecionada";
+  $: selectedProjectsList = projects.filter((p) => selections[p.path]);
+  $: hasProjects = projects.length > 0;
+  $: hasSelectedProjects = selectedProjectsList.length > 0;
+  $: canExport = hasSelectedProjects && activeFormats.length > 0 && !isExporting && !isScanning;
+  $: outputPathLabel =
+    outputPath ||
+    (selectedProjectsList.length > 1 && selectedPath
+      ? `${selectedPath} (lote → pasta selecionada)`
+      : "Pasta do projeto");
+  $: anyOutputs = Object.values(projectOutputs).some(
+    (o) => Object.keys(o).length > 0
+  );
+  $: normalizedQuery = searchQuery.trim().toLowerCase();
+  $: filteredProjects = normalizedQuery
+    ? projects.filter(
+        (p) =>
+          p.name.toLowerCase().includes(normalizedQuery) ||
+          p.path.toLowerCase().includes(normalizedQuery)
+      )
+    : projects;
+  $: hasActiveFilter = normalizedQuery.length > 0;
 
   const applyTheme = (mode: ThemeMode) => {
     theme = mode;
@@ -75,6 +111,7 @@
   const persistPreferences = () => {
     localStorage.setItem("bi-doc-maker-formats", JSON.stringify(selectedFormats));
     localStorage.setItem("bi-doc-maker-branding", JSON.stringify(branding));
+    localStorage.setItem("bi-doc-maker-output", outputPath);
   };
 
   const loadPreferences = () => {
@@ -107,6 +144,11 @@
         branding = { ...defaultBranding };
       }
     }
+
+    const storedOutput = localStorage.getItem("bi-doc-maker-output");
+    if (storedOutput) {
+      outputPath = storedOutput;
+    }
   };
 
   onMount(() => {
@@ -136,12 +178,75 @@
     }
   };
 
+  const resetScanState = () => {
+    projects = [];
+    selections = {};
+    projectStatus = {};
+    projectErrors = {};
+    projectOutputs = {};
+    scanCompleted = false;
+    batchSummary = null;
+    errorMessage = "";
+    searchQuery = "";
+  };
+
+  const scanFolder = async (root: string) => {
+    isScanning = true;
+    resetScanState();
+    try {
+      const result = await invoke("scan_pbip_projects", { root });
+      const parsed = PbipEntryArraySchema.parse(result);
+      projects = parsed;
+      selections = Object.fromEntries(parsed.map((p) => [p.path, true]));
+      projectStatus = Object.fromEntries(parsed.map((p) => [p.path, "idle" as ProjectStatus]));
+      scanCompleted = true;
+      if (parsed.length === 0) {
+        errorMessage = "Nenhum projeto Power BI (.pbip) encontrado nessa pasta.";
+      }
+    } catch (error) {
+      errorMessage = `Falha ao escanear a pasta: ${String(error)}`;
+    } finally {
+      isScanning = false;
+    }
+  };
+
   const pickProjectFolder = async () => {
     const result = await openDialog({ directory: true, multiple: false });
     if (typeof result === "string") {
       selectedPath = result;
-      exportResult = null;
-      errorMessage = "";
+      await scanFolder(result);
+    }
+  };
+
+  const rescanFolder = async () => {
+    if (selectedPath) {
+      await scanFolder(selectedPath);
+    }
+  };
+
+  const toggleProject = (path: string) => {
+    selections = { ...selections, [path]: !selections[path] };
+  };
+
+  const selectAllProjects = () => {
+    const next = { ...selections };
+    for (const p of filteredProjects) next[p.path] = true;
+    selections = next;
+  };
+
+  const clearSelection = () => {
+    const next = { ...selections };
+    for (const p of filteredProjects) next[p.path] = false;
+    selections = next;
+  };
+
+  const clearSearch = () => {
+    searchQuery = "";
+  };
+
+  const handleKeydown = (event: KeyboardEvent) => {
+    if (event.key === "Escape" && showOptions) {
+      showOptions = false;
     }
   };
 
@@ -161,9 +266,23 @@
     persistPreferences();
   };
 
+  const pickOutputFolder = async () => {
+    const result = await openDialog({ directory: true, multiple: false });
+    if (typeof result === "string") {
+      outputPath = result;
+      persistPreferences();
+    }
+  };
+
+  const resetOutputFolder = () => {
+    outputPath = "";
+    persistPreferences();
+  };
+
   const restoreDefaults = () => {
     selectedFormats = { ...defaultFormats };
     branding = { ...defaultBranding };
+    outputPath = "";
     persistPreferences();
   };
 
@@ -175,56 +294,131 @@
   };
 
   const exportDocumentation = async () => {
-    if (!selectedPath || activeFormats.length === 0) {
-      errorMessage = "Selecione a pasta PBIP e ao menos um formato.";
+    if (selectedProjectsList.length === 0 || activeFormats.length === 0) {
+      errorMessage = "Selecione ao menos um projeto e um formato.";
       return;
     }
 
     isExporting = true;
     errorMessage = "";
-    exportResult = null;
+    batchSummary = null;
+    projectErrors = {};
+    projectOutputs = {};
+    projectStatus = Object.fromEntries(
+      projects.map((p) => [p.path, selections[p.path] ? "idle" : "idle"])
+    );
 
-    try {
-      const result: unknown = await invoke("export_project", {
-        path: selectedPath,
-        outputDir: selectedPath,
-        formats: activeFormats,
-        branding
-      });
+    let okCount = 0;
+    let errorCount = 0;
+    let firstHtmlOutput = "";
 
-      const parsedResult = CoreResultSchema.parse(result);
-      if (!parsedResult.ok) {
-        throw new Error(parsedResult.error ?? "Falha ao gerar a documentação.");
+    const isBatch = selectedProjectsList.length > 1;
+    const sharedOutputDir = outputPath || (isBatch ? selectedPath : "");
+
+    for (const project of selectedProjectsList) {
+      currentProjectName = project.name;
+      projectStatus = { ...projectStatus, [project.path]: "running" };
+
+      try {
+        const result: unknown = await invoke("export_project", {
+          path: project.path,
+          outputDir: sharedOutputDir || project.path,
+          formats: activeFormats,
+          branding
+        });
+
+        const parsedResult = CoreResultSchema.parse(result);
+        if (!parsedResult.ok) {
+          throw new Error(parsedResult.error ?? "Falha ao gerar a documentação.");
+        }
+
+        projectStatus = { ...projectStatus, [project.path]: "ok" };
+        projectOutputs = { ...projectOutputs, [project.path]: parsedResult.outputs };
+        okCount += 1;
+        if (!firstHtmlOutput && parsedResult.outputs.html) {
+          firstHtmlOutput = parsedResult.outputs.html;
+        }
+      } catch (error) {
+        projectStatus = { ...projectStatus, [project.path]: "error" };
+        projectErrors = { ...projectErrors, [project.path]: formatError(String(error)) };
+        errorCount += 1;
       }
+    }
 
-      exportResult = parsedResult;
-      if (parsedResult.outputs.html) {
-        await invoke("open_output_file", { path: parsedResult.outputs.html });
+    currentProjectName = "";
+    batchSummary = { ok: okCount, error: errorCount, total: selectedProjectsList.length };
+    isExporting = false;
+
+    if (selectedProjectsList.length === 1 && firstHtmlOutput) {
+      try {
+        await invoke("open_output_file", { path: firstHtmlOutput });
+      } catch (error) {
+        errorMessage = `Documentação gerada, mas falhou ao abrir o HTML: ${String(error)}`;
       }
-    } catch (error) {
-      errorMessage = formatError(String(error));
-    } finally {
-      isExporting = false;
     }
   };
 
   const parentFolder = (path: string): string =>
     path.replace(/[\\/][^\\/]+$/, "");
 
+  const cleanPath = (path: string): string =>
+    path.replace(/^\\\\\?\\/, "");
+
+  const relativeProjectPath = (projectPath: string): string => {
+    const clean = cleanPath(projectPath);
+    const root = cleanPath(selectedPath);
+    if (!root) return clean;
+    const lowerClean = clean.toLowerCase();
+    const lowerRoot = root.toLowerCase();
+    if (lowerClean === lowerRoot) return ".";
+    const prefix = lowerRoot.endsWith("\\") ? lowerRoot : lowerRoot + "\\";
+    if (lowerClean.startsWith(prefix)) {
+      return clean.substring(prefix.length);
+    }
+    return clean;
+  };
+
   const openOutputFolder = async () => {
-    const firstOutput = exportResult ? Object.values(exportResult.outputs)[0] : "";
-    const folder = firstOutput ? parentFolder(firstOutput) : `${selectedPath}\\Doc_BI`;
-    if (folder) {
-      await invoke("open_output_folder", { path: folder });
+    const allOutputs = Object.values(projectOutputs).flatMap((o) => Object.values(o));
+    if (allOutputs.length > 0) {
+      const folder = parentFolder(allOutputs[0]);
+      if (folder) {
+        await invoke("open_output_folder", { path: folder });
+        return;
+      }
+    }
+    const fallback = outputPath ? `${outputPath}\\Doc_BI` : selectedPath;
+    if (fallback) {
+      await invoke("open_output_folder", { path: fallback });
+    }
+  };
+
+  const openProjectOutput = async (path: string) => {
+    const outputs = projectOutputs[path];
+    if (!outputs) return;
+    const first = Object.values(outputs)[0];
+    if (first) {
+      const folder = parentFolder(first);
+      if (folder) {
+        await invoke("open_output_folder", { path: folder });
+      }
     }
   };
 </script>
+
+<svelte:window on:keydown={handleKeydown} />
 
 <main class="app-shell">
   <section class="workspace">
     <header class="topbar">
       <div class="brand" aria-label="BI Doc Maker">
-        <img class="brand-logo" src={logoUrl} alt="" />
+        <span class="brand-logo" aria-hidden="true">
+          <svg viewBox="0 0 64 64" fill="currentColor">
+            <rect x="11" y="36" width="10" height="16" rx="2"/>
+            <rect x="27" y="26" width="10" height="26" rx="2"/>
+            <rect x="43" y="14" width="10" height="38" rx="2"/>
+          </svg>
+        </span>
         <strong>BI Doc Maker</strong>
       </div>
 
@@ -248,56 +442,214 @@
       </nav>
     </header>
 
-    <section class="hero-panel">
-      <button class="folder-picker" type="button" on:click={pickProjectFolder} aria-label="Selecionar pasta do arquivo PBIP">
-        <span class="folder-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24"><path d="M3.75 7.25A2.25 2.25 0 0 1 6 5h4.15l2 2.5H18A2.25 2.25 0 0 1 20.25 9.75v7A2.25 2.25 0 0 1 18 19H6a2.25 2.25 0 0 1-2.25-2.25v-9.5Z"/></svg>
-        </span>
-        <span class="picker-copy">
-          <strong>Selecione a pasta do arquivo PBIP</strong>
-          <span title={selectedProjectLabel}>{selectedProjectLabel}</span>
-        </span>
-      </button>
-
-      {#if hasSelectedProject}
-        <div class="main-actions">
-          <button class="primary action-button" type="button" disabled={!canExport} on:click={exportDocumentation}>
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m0 0 4-4m-4 4-4-4M5 19h14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            <span>{isExporting ? "Gerando documentação..." : "Gerar Documentação"}</span>
-          </button>
-          <button type="button" class="secondary action-button" on:click={() => (showOptions = true)}>
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M7 12h10M10 17h4" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
-            <span>Mais Opções</span>
+    <div class="content">
+      {#if !selectedPath}
+        <div class="empty-state">
+          <button
+            class="folder-picker hero"
+            type="button"
+            on:click={pickProjectFolder}
+            aria-label="Selecionar pasta com projetos PBIP"
+          >
+            <span class="folder-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h4.5l2 2.5h6.5A2.5 2.5 0 0 1 21 10v7.5A2.5 2.5 0 0 1 18.5 20h-13A2.5 2.5 0 0 1 3 17.5v-10Z"/></svg>
+            </span>
+            <span class="picker-copy">
+              <strong>Selecione a pasta com seus projetos PBIP</strong>
+              <span>Vamos varrer as subpastas e listar os projetos encontrados.</span>
+            </span>
           </button>
         </div>
+      {:else}
+        <button
+          class="path-bar"
+          type="button"
+          on:click={pickProjectFolder}
+          disabled={isExporting || isScanning}
+          aria-label="Trocar pasta selecionada"
+        >
+          <span class="path-bar-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h4.5l2 2.5h6.5A2.5 2.5 0 0 1 21 10v7.5A2.5 2.5 0 0 1 18.5 20h-13A2.5 2.5 0 0 1 3 17.5v-10Z"/></svg>
+          </span>
+          <span class="path-bar-info">
+            <small>Pasta selecionada</small>
+            <strong title={cleanPath(selectedPath)}>{cleanPath(selectedPath)}</strong>
+          </span>
+          <span class="path-bar-change" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M12 4v8m0 0 4-4m-4 4-4-4M5 20h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Trocar
+          </span>
+        </button>
+
+        {#if isScanning}
+          <div class="state-card" aria-live="polite">
+            <span class="spinner" aria-hidden="true"></span>
+            <div>
+              <strong>Procurando projetos...</strong>
+              <span>Vasculhando subpastas em busca de arquivos .pbip.</span>
+            </div>
+          </div>
+        {/if}
+
+        {#if scanCompleted && hasProjects}
+          <section class="project-panel">
+            <header class="project-panel-header">
+              <div class="project-count-block">
+                <strong>
+                  {#if hasActiveFilter}
+                    {filteredProjects.length} de {projects.length}
+                  {:else}
+                    {projects.length}
+                  {/if}
+                  {projects.length === 1 ? "projeto encontrado" : "projetos encontrados"}
+                </strong>
+                <small>{selectedProjectsList.length} marcado{selectedProjectsList.length === 1 ? "" : "s"}</small>
+              </div>
+              <div class="project-search" role="search">
+                <span class="search-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24"><path d="m21 21-4.3-4.3M17 11a6 6 0 1 1-12 0 6 6 0 0 1 12 0Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </span>
+                <input
+                  type="search"
+                  class="search-input"
+                  placeholder="Filtrar por nome ou caminho..."
+                  bind:value={searchQuery}
+                  disabled={isExporting}
+                  aria-label="Filtrar lista de projetos"
+                />
+                {#if hasActiveFilter}
+                  <button type="button" class="search-clear" on:click={clearSearch} title="Limpar filtro" aria-label="Limpar filtro">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+                  </button>
+                {/if}
+              </div>
+              <div class="project-toolbar">
+                {#if projects.length > 1}
+                  <button type="button" on:click={selectAllProjects} disabled={isExporting || filteredProjects.length === 0}>Marcar todos</button>
+                  <button type="button" on:click={clearSelection} disabled={isExporting || filteredProjects.length === 0}>Limpar</button>
+                {/if}
+                <button type="button" on:click={rescanFolder} disabled={isExporting} title="Refazer varredura" aria-label="Re-escanear pasta">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 0 1 14-5.3M20 4v5h-5M20 12a8 8 0 0 1-14 5.3M4 20v-5h5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </button>
+              </div>
+            </header>
+            {#if filteredProjects.length === 0}
+              <div class="project-list-empty">
+                <strong>Nenhum projeto bate com "{searchQuery}"</strong>
+                <button type="button" on:click={clearSearch}>Limpar filtro</button>
+              </div>
+            {:else}
+              <ul class="project-list">
+                {#each filteredProjects as project (project.path)}
+                  <li class="project-item" data-status={projectStatus[project.path] ?? "idle"}>
+                    <label class="project-row">
+                      <input
+                        type="checkbox"
+                        checked={selections[project.path] ?? false}
+                        on:change={() => toggleProject(project.path)}
+                        disabled={isExporting}
+                      />
+                      <span class="project-info">
+                        <strong>{project.name}</strong>
+                        <small title={cleanPath(project.path)}>{relativeProjectPath(project.path)}</small>
+                      </span>
+                    </label>
+                    <span class="project-status" aria-live="polite">
+                      {#if projectStatus[project.path] === "running"}
+                        <span class="spinner small" aria-label="Processando"></span>
+                      {:else if projectStatus[project.path] === "ok"}
+                        <button class="status-pill status-ok" type="button" on:click={() => openProjectOutput(project.path)} title="Abrir pasta deste projeto" aria-label="Sucesso, abrir pasta">
+                          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 5 5L20 7" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        </button>
+                      {:else if projectStatus[project.path] === "error"}
+                        <span class="status-pill status-error" title={projectErrors[project.path] ?? "Erro"} aria-label={`Erro: ${projectErrors[project.path] ?? ""}`}>
+                          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>
+                        </span>
+                      {/if}
+                    </span>
+                  </li>
+                {/each}
+              </ul>
+            {/if}
+          </section>
+        {/if}
+
+        {#if scanCompleted && !hasProjects && !errorMessage && !isScanning}
+          <div class="state-card empty-result">
+            <strong>Nenhum projeto PBIP encontrado</strong>
+            <span>Verifique se a pasta selecionada contém arquivos <code>.pbip</code> ou subpastas com modelos Power BI.</span>
+          </div>
+        {/if}
       {/if}
-    </section>
-
-    {#if isExporting}
-      <section class="notice loading" aria-live="polite">
-        <span class="spinner" aria-hidden="true"></span>
-        <div>
-          <strong>Gerando documentação</strong>
-          <span>O HTML será aberto para visualização ao final quando esse formato estiver marcado.</span>
-        </div>
-      </section>
-    {/if}
+    </div>
 
     {#if errorMessage}
-      <section class="notice error">
-        <strong>Erro</strong>
-        <span>{errorMessage}</span>
+      <section class="notice error" role="alert">
+        <span class="notice-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M12 9v4m0 4h.01M10.3 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.7 3.86a2 2 0 0 0-3.4 0Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </span>
+        <div>
+          <strong>Erro</strong>
+          <span>{errorMessage}</span>
+        </div>
       </section>
     {/if}
 
-    {#if exportResult && Object.keys(exportResult.outputs).length > 0}
-      <section class="notice success">
+    {#if batchSummary}
+      <section class="notice" class:success={batchSummary.error === 0} class:warning={batchSummary.error > 0} role="status">
+        <span class="notice-icon" aria-hidden="true">
+          {#if batchSummary.error === 0}
+            <svg viewBox="0 0 24 24"><path d="m5 12 5 5L20 7" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          {:else}
+            <svg viewBox="0 0 24 24"><path d="M12 9v4m0 4h.01M10.3 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.7 3.86a2 2 0 0 0-3.4 0Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          {/if}
+        </span>
         <div>
-          <strong>Documentação salva</strong>
-          <span>Documentação salva na pasta Doc_BI.</span>
+          <strong>
+            {batchSummary.ok}/{batchSummary.total} {batchSummary.total === 1 ? "documentação gerada" : "documentações geradas"}
+          </strong>
+          <span>
+            {#if batchSummary.error > 0}
+              {batchSummary.error} falharam. Veja os detalhes em cada projeto na lista.
+            {:else}
+              Tudo certo! Documentação salva.
+            {/if}
+          </span>
         </div>
-        <button type="button" on:click={openOutputFolder}>Abrir pasta</button>
+        {#if batchSummary.ok > 0}
+          <button type="button" class="notice-action" on:click={openOutputFolder}>Abrir pasta</button>
+        {/if}
       </section>
+    {/if}
+
+    {#if selectedPath && hasProjects && !isScanning}
+      <footer class="action-bar">
+        <button type="button" class="secondary action-button" on:click={() => (showOptions = true)} disabled={isExporting}>
+          <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="4" y1="7" x2="10" y2="7"/>
+            <line x1="14" y1="7" x2="20" y2="7"/>
+            <circle cx="12" cy="7" r="2"/>
+            <line x1="4" y1="17" x2="8" y2="17"/>
+            <line x1="12" y1="17" x2="20" y2="17"/>
+            <circle cx="10" cy="17" r="2"/>
+          </svg>
+          <span>Mais Opções</span>
+        </button>
+        <button class="primary action-button" type="button" disabled={!canExport} on:click={exportDocumentation}>
+          {#if isExporting}
+            <span class="spinner small" aria-hidden="true"></span>
+            <span>Gerando {currentProjectName || "..."}</span>
+          {:else}
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5Z"/>
+              <polyline points="14 3 14 8 19 8"/>
+              <line x1="12" y1="11" x2="12" y2="17"/>
+              <polyline points="9 14 12 17 15 14"/>
+            </svg>
+            <span>Gerar Documentação ({selectedProjectsList.length})</span>
+          {/if}
+        </button>
+      </footer>
     {/if}
   </section>
 </main>
@@ -306,70 +658,102 @@
   <div class="modal-backdrop" role="presentation" on:click|self={() => (showOptions = false)}>
     <section class="options-modal" role="dialog" aria-modal="true" aria-labelledby="options-title">
       <header class="modal-header">
-        <div>
-          <p class="eyebrow">Configurações</p>
+        <div class="modal-titles">
           <h2 id="options-title">Mais Opções</h2>
+          <p class="modal-subtitle">Personalize a documentação que será gerada.</p>
         </div>
         <button class="icon-button" type="button" title="Fechar" aria-label="Fechar opções" on:click={() => (showOptions = false)}>
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
         </button>
       </header>
 
-      <div class="option-group">
-        <h3>Formatos</h3>
-        <div class="format-grid">
+      <section class="option-group">
+        <header class="option-group-header">
+          <h3>Formatos de exportação</h3>
+          <small>Selecione um ou mais formatos.</small>
+        </header>
+        <div class="chip-group" role="group" aria-label="Formatos de exportação">
           {#each outputFormats as format}
-            <label class="check">
-              <input type="checkbox" bind:checked={selectedFormats[format]} on:change={persistPreferences} />
-              <span>{formatLabels[format]}</span>
-            </label>
+            <button
+              type="button"
+              class="chip"
+              class:active={selectedFormats[format]}
+              aria-pressed={selectedFormats[format]}
+              on:click={() => { selectedFormats = { ...selectedFormats, [format]: !selectedFormats[format] }; persistPreferences(); }}
+            >
+              <span class="chip-tick" aria-hidden="true">
+                {#if selectedFormats[format]}
+                  <svg viewBox="0 0 24 24"><path d="m5 12 5 5L20 7" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                {/if}
+              </span>
+              <span class="chip-label">{formatLabels[format]}</span>
+            </button>
           {/each}
         </div>
-      </div>
+      </section>
 
-      <div class="option-group">
-        <h3>Título da documentação</h3>
-        <label class="text-field">
-          <span>Título exibido no documento</span>
-          <input
-            class="text-input"
-            type="text"
-            bind:value={branding.documentTitle}
-            placeholder="Documentação Power BI"
-            on:input={persistPreferences}
-          />
-        </label>
-      </div>
+      <section class="option-group">
+        <header class="option-group-header">
+          <h3>Pasta de saída</h3>
+          <small>No modo lote, todos os projetos compartilham essa pasta.</small>
+        </header>
+        <div class="input-row">
+          <input class="input-readonly" readonly value={outputPathLabel} title={outputPathLabel} />
+          <button type="button" on:click={pickOutputFolder}>Selecionar</button>
+          <button type="button" on:click={resetOutputFolder} disabled={!outputPath}>Padrão</button>
+        </div>
+      </section>
 
-      <div class="option-group">
-        <h3>Logo da empresa</h3>
-        <div class="logo-row">
-          <input readonly value={branding.logoPath || "Nenhum logo selecionado"} title={branding.logoPath || "Nenhum logo selecionado"} />
+      <section class="option-group">
+        <header class="option-group-header">
+          <h3>Título da documentação</h3>
+          <small>Aparece na capa de cada documento.</small>
+        </header>
+        <input
+          class="text-input"
+          type="text"
+          bind:value={branding.documentTitle}
+          placeholder="Documentação Power BI"
+          on:input={persistPreferences}
+          aria-label="Título exibido no documento"
+        />
+      </section>
+
+      <section class="option-group">
+        <header class="option-group-header">
+          <h3>Logo da empresa</h3>
+          <small>PNG ou JPG, exibido na capa.</small>
+        </header>
+        <div class="input-row">
+          <input class="input-readonly" readonly value={branding.logoPath || "Nenhum logo selecionado"} title={branding.logoPath || "Nenhum logo selecionado"} />
           <button type="button" on:click={pickLogo}>Selecionar</button>
           <button type="button" on:click={removeLogo} disabled={!branding.logoPath}>Remover</button>
         </div>
-      </div>
+      </section>
 
-      <div class="option-group">
-        <h3>Cores da documentação</h3>
-        <div class="color-grid">
-          <label class="color-control">
-            <span>Primária</span>
-            <input type="color" bind:value={branding.primaryColor} on:change={persistPreferences} />
-            <code>{branding.primaryColor}</code>
+      <section class="option-group">
+        <header class="option-group-header">
+          <h3>Cores da documentação</h3>
+          <small>Definem o esquema visual aplicado.</small>
+        </header>
+        <div class="color-list">
+          <label class="color-row">
+            <input type="color" class="color-input" bind:value={branding.primaryColor} on:change={persistPreferences} aria-label="Cor primária" />
+            <span class="color-name">Primária</span>
+            <code class="color-hex">{branding.primaryColor.toUpperCase()}</code>
           </label>
-          <label class="color-control">
-            <span>Secundária</span>
-            <input type="color" bind:value={branding.secondaryColor} on:change={persistPreferences} />
-            <code>{branding.secondaryColor}</code>
+          <label class="color-row">
+            <input type="color" class="color-input" bind:value={branding.secondaryColor} on:change={persistPreferences} aria-label="Cor secundária" />
+            <span class="color-name">Secundária</span>
+            <code class="color-hex">{branding.secondaryColor.toUpperCase()}</code>
           </label>
-          <label class="color-control">
-            <span>Fundo claro</span>
-            <input type="color" bind:value={branding.lightColor} on:change={persistPreferences} />
-            <code>{branding.lightColor}</code>
+          <label class="color-row">
+            <input type="color" class="color-input" bind:value={branding.lightColor} on:change={persistPreferences} aria-label="Cor de fundo claro" />
+            <span class="color-name">Fundo claro</span>
+            <code class="color-hex">{branding.lightColor.toUpperCase()}</code>
           </label>
         </div>
-      </div>
+      </section>
 
       <footer class="modal-footer">
         <button type="button" on:click={restoreDefaults}>Restaurar padrões</button>

@@ -55,9 +55,9 @@ class CapturaLogs:
 def _configurar_stdio() -> None:
     for stream in (sys.stdout, sys.stderr):
         try:
-            stream.reconfigure(encoding="utf-8")
-        except Exception:
-            pass
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception as exc:
+            sys.stderr.write(f"[AVISO] Falha ao reconfigurar {stream.name} para utf-8: {exc}\n")
 
 
 def _imprimir_json(payload: Dict) -> None:
@@ -75,29 +75,29 @@ def _normalizar_formatos(valor: str) -> List[str]:
     return formatos
 
 
-def _analisar(caminho_projeto: str, logs: CapturaLogs) -> DocumentadorPBIP:
-    with redirect_stdout(logs):
-        doc = DocumentadorPBIP(caminho_projeto)
-        doc.extrair_informacoes()
+def _analisar(caminho_projeto: str) -> DocumentadorPBIP:
+    doc = DocumentadorPBIP(caminho_projeto)
+    doc.extrair_informacoes()
     return doc
 
 
 def comando_analyze(args: argparse.Namespace, logs: CapturaLogs) -> Dict:
-    doc = _analisar(args.project, logs)
-    return doc.gerar_resumo_estruturado(warnings=logs.avisos())
+    with redirect_stdout(logs):
+        doc = _analisar(args.project)
+        return doc.gerar_resumo_estruturado(warnings=logs.avisos())
 
 
 def comando_export(args: argparse.Namespace, logs: CapturaLogs) -> Dict:
-    formatos = _normalizar_formatos(args.formats)
-    output_dir = Path(args.output_dir) / "Doc_BI"
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    doc = _analisar(args.project, logs)
-    branding = json.loads(args.branding_json) if args.branding_json else None
-    doc.aplicar_branding(branding)
-    outputs: Dict[str, str] = {}
-
     with redirect_stdout(logs):
+        formatos = _normalizar_formatos(args.formats)
+        output_dir = Path(args.output_dir) / "Doc_BI"
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        doc = _analisar(args.project)
+        branding = json.loads(args.branding_json) if args.branding_json else None
+        doc.aplicar_branding(branding)
+        outputs: Dict[str, str] = {}
+
         for formato in formatos:
             caminho_saida = output_dir / f"{doc.nome_projeto}_documentacao.{formato}"
             if formato == "md":
@@ -113,7 +113,7 @@ def comando_export(args: argparse.Namespace, logs: CapturaLogs) -> Dict:
                 raise RuntimeError(f"Falha ao gerar arquivo {formato}.")
             outputs[formato] = str(Path(gerado).resolve())
 
-    return doc.gerar_resumo_estruturado(outputs=outputs, warnings=logs.avisos())
+        return doc.gerar_resumo_estruturado(outputs=outputs, warnings=logs.avisos())
 
 
 def _criar_parser() -> argparse.ArgumentParser:
