@@ -3203,12 +3203,11 @@ class DocumentadorPBIP:
             if tabela.medidas:
                 md.append(f"#### Medidas (Resumo)")
                 md.append(f"")
-                md.append(f"| Nome | Formato |")
-                md.append(f"|------|---------|")
+                md.append(f"| Nome |")
+                md.append(f"|------|")
 
                 for medida in tabela.medidas:
-                    formato = medida.formato or "-"
-                    md.append(f"| {medida.nome} | {formato} |")
+                    md.append(f"| {medida.nome} |")
 
                 md.append(f"")
 
@@ -3224,9 +3223,6 @@ class DocumentadorPBIP:
                         md.append(f"*{medida.descricao}*")
                         md.append(f"")
 
-                    if medida.formato:
-                        md.append(f"**Formato**: `{medida.formato}`")
-                        md.append(f"")
                     adicionar_leitura_dax_markdown(md, analisar_dax(medida.expressao_dax))
                     md.append(f"```dax")
                     # Verifica se a expressão DAX está vazia ou None
@@ -4458,8 +4454,8 @@ class DocumentadorPBIP:
                 h.paragraph_format.space_before = Pt(8)
 
                 # Tabela resumo
-                rows_med = [[m.nome, m.formato or "—"] for m in tabela.medidas]
-                _add_table(["Nome da Medida", "Formato de Exibição"], rows_med, compact=True)
+                rows_med = [[m.nome] for m in tabela.medidas]
+                _add_table(["Nome da Medida"], rows_med, compact=True)
 
                 # Código de cada medida
                 h_cod = doc.add_heading("Código das Medidas", level=4)
@@ -4469,8 +4465,8 @@ class DocumentadorPBIP:
                     _add_dax_object_header(
                         "Medida",
                         medida.nome,
-                        "Formato de exibição",
-                        medida.formato,
+                        None,
+                        None,
                         medida.descricao if hasattr(medida, 'descricao') else None,
                         show_tipo=False,
                     )
