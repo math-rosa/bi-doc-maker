@@ -113,7 +113,17 @@ else {
 }
 
 $PyInstallerArgs += (Join-Path $Root "documentador_core_cli.py")
-& $VenvPython @PyInstallerArgs
+# Workaround: PowerShell 5.1 com $ErrorActionPreference=Stop trata stderr
+# de native commands como erro. PyInstaller 6+ emite INFO no stderr.
+# Roda com EAP=Continue para suportar isso, depois verifica exit code.
+$PrevEAP = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
+try {
+    & $VenvPython @PyInstallerArgs
+}
+finally {
+    $ErrorActionPreference = $PrevEAP
+}
 Assert-LastExitCode "PyInstaller"
 
 $Triple = Get-RustHostTriple
@@ -132,15 +142,28 @@ Invoke-Signtool -Path $SidecarExe -Thumbprint $CertificateThumbprint -TsaUrl $Ti
 
 Push-Location $TauriDir
 try {
-    if (-not $SkipNpmInstall) {
-        Write-Host "==> Instalando dependencias Node"
-        npm.cmd ci
-        Assert-LastExitCode "npm ci"
+    $PrevEAP = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        if (-not $SkipNpmInstall) {
+            Write-Host "==> Instalando dependencias Node"
+            npm.cmd ci
+            $NpmCiCode = $LASTEXITCODE
+        }
+        else {
+            $NpmCiCode = 0
+        }
+
+        Write-Host "==> Gerando instalador Tauri"
+        npm.cmd run tauri:build
+        $TauriBuildCode = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $PrevEAP
     }
 
-    Write-Host "==> Gerando instalador Tauri"
-    npm.cmd run tauri:build
-    Assert-LastExitCode "npm run tauri:build"
+    if ($NpmCiCode -ne 0) { throw "npm ci falhou (codigo $NpmCiCode)." }
+    if ($TauriBuildCode -ne 0) { throw "npm run tauri:build falhou (codigo $TauriBuildCode)." }
 }
 finally {
     Pop-Location

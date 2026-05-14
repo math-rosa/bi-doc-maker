@@ -177,6 +177,10 @@ class LeituraDax:
     funcoes: List[str] = field(default_factory=list)
     itens: List[str] = field(default_factory=list)
     categorias: Dict[str, List[str]] = field(default_factory=dict)
+    # Candidatos extraidos via regex (validar depois contra o modelo)
+    referencias_medidas: List[str] = field(default_factory=list)  # [Nome] sem prefixo de tabela
+    referencias_tabelas: List[str] = field(default_factory=list)  # Tabela[col] ou 'Tabela'[col]
+    variaveis_dax: List[str] = field(default_factory=list)  # VAR nome (excluir de medidas)
 
 
 @dataclass(frozen=True)
@@ -1321,6 +1325,28 @@ def analisar_dax(expressao: str) -> LeituraDax:
             leitura.itens.append(item)
             leitura.categorias.setdefault("logica", []).append(item)
 
+    # Coleta nomes de VAR para nao tratar como medida referenciada
+    for m in re.finditer(r"\bVAR\s+([A-Za-z_][A-Za-z0-9_]*)\s*=", expressao, re.I):
+        nome_var = m.group(1)
+        if nome_var not in leitura.variaveis_dax:
+            leitura.variaveis_dax.append(nome_var)
+
+    # Referencias a tabelas: Tabela[Coluna] ou 'Tabela com espacos'[Coluna]
+    for m in re.finditer(r"(?:'([^']+)'|([A-Za-z_][A-Za-z0-9_]*))\s*\[([^\]\[]+)\]", expressao):
+        tabela_nome = m.group(1) or m.group(2)
+        if tabela_nome and tabela_nome not in leitura.referencias_tabelas:
+            leitura.referencias_tabelas.append(tabela_nome)
+
+    # Referencias a medidas: [Nome] SEM prefixo de tabela (sem ' ou identificador antes)
+    for m in re.finditer(r"(?<![\w'\]])\[([^\]\[]+)\]", expressao):
+        nome = m.group(1).strip()
+        if not nome:
+            continue
+        if nome in leitura.variaveis_dax:
+            continue
+        if nome not in leitura.referencias_medidas:
+            leitura.referencias_medidas.append(nome)
+
     return leitura
 
 
@@ -1449,6 +1475,48 @@ def adicionar_regra_power_query_markdown(md: List[str], regra: RegraPowerQuery) 
                 f"| {escape_table(linha.regra)} "
                 f"| {escape_table(linha.descricao)} |"
             )
+        md.append("")
+
+
+def adicionar_linhagem_dax_markdown(
+    md: List[str],
+    leitura: LeituraDax,
+    medidas_conhecidas: Optional[Dict[str, str]] = None,
+    tabelas_conhecidas: Optional[set] = None,
+    nome_medida: Optional[str] = None,
+    medidas_duplicadas: Optional[Dict[str, List[str]]] = None,
+) -> None:
+    """Renderiza linhagem e avisos de qualidade da expressao DAX.
+
+    - Medidas referenciadas: nomes [X] que casam com medidas conhecidas do modelo.
+    - Avisos: tabelas referenciadas inexistentes no modelo + duplicatas.
+    """
+    medidas_conhecidas = medidas_conhecidas or {}
+    tabelas_conhecidas = tabelas_conhecidas or set()
+    medidas_duplicadas = medidas_duplicadas or {}
+
+    medidas_refs = [r for r in leitura.referencias_medidas if r in medidas_conhecidas]
+    tabelas_inexistentes = [
+        t for t in leitura.referencias_tabelas
+        if t not in tabelas_conhecidas
+    ]
+
+    if medidas_refs:
+        nomes = ", ".join(f"`[{m}]`" for m in medidas_refs)
+        md.append(f"**Medidas referenciadas**: {nomes}")
+        md.append("")
+
+    avisos: List[str] = []
+    if tabelas_inexistentes:
+        lista = ", ".join(f"`{t}`" for t in tabelas_inexistentes)
+        avisos.append(f"Referencia tabela(s) que nao existem no modelo: {lista}")
+    if nome_medida and nome_medida in medidas_duplicadas:
+        irmaos = ", ".join(f"`{n}`" for n in medidas_duplicadas[nome_medida])
+        avisos.append(f"DAX identico ao de: {irmaos} (medidas duplicadas)")
+
+    if avisos:
+        for av in avisos:
+            md.append(f"> ⚠️ **Aviso de qualidade**: {av}")
         md.append("")
 
 
@@ -2177,7 +2245,68 @@ class DocumentadorPBIP:
         # Totaliza visuais a partir das páginas processadas
         self.total_visuais = sum(len(p.visuais) for p in self.paginas)
 
+        # Indexa medidas/tabelas e detecta problemas de qualidade
+        self._analisar_qualidade_modelo()
+
         print("[OK] Extração concluída!\n")
+
+    def _analisar_qualidade_modelo(self):
+        """Indexa medidas/tabelas e detecta avisos de qualidade do modelo.
+
+        Constroi:
+        - medidas_index: nome_medida -> nome_tabela (dono da medida)
+        - tabelas_set: set de nomes de tabela conhecidos
+        - medidas_duplicadas: chave_dax_normalizado -> [nomes_medidas]
+        - colunas_sum_em_id: [(tabela, coluna)] com sumarizacao 'sum' em identificadores
+        """
+        self.medidas_index: Dict[str, str] = {}
+        self.tabelas_set: set = set()
+        self.medidas_duplicadas: Dict[str, List[str]] = {}
+        self.colunas_sum_em_id: List[Tuple[str, str]] = []
+
+        # Indices basicos
+        for tabela in self.tabelas:
+            self.tabelas_set.add(tabela.nome)
+            for medida in tabela.medidas:
+                self.medidas_index[medida.nome] = tabela.nome
+
+        # Duplicatas: normaliza DAX (remove whitespace) e agrupa
+        dax_groups: Dict[str, List[str]] = {}
+        for tabela in self.tabelas:
+            for medida in tabela.medidas:
+                dax = (medida.expressao_dax or "").strip()
+                if not dax:
+                    continue
+                # Normaliza: remove comentarios de linha, colapsa whitespace
+                norm = re.sub(r"//[^\n]*", "", dax)
+                norm = re.sub(r"/\*.*?\*/", "", norm, flags=re.DOTALL)
+                norm = re.sub(r"\s+", " ", norm).strip()
+                # Ignora DAX triviais (1 token) para evitar falso positivo
+                if len(norm) < 15:
+                    continue
+                dax_groups.setdefault(norm, []).append(medida.nome)
+
+        for norm, nomes in dax_groups.items():
+            if len(nomes) >= 2:
+                for nome in nomes:
+                    self.medidas_duplicadas[nome] = [n for n in nomes if n != nome]
+
+        # Sumarizacao 'sum' em colunas-identificador (heuristica por nome)
+        ID_PATTERNS = (
+            re.compile(r"^(ID|CODIGO|CD|KEY|CHAVE)$", re.I),
+            re.compile(r"_(ID|CD|NR|KEY|COD|CODIGO)$", re.I),
+            re.compile(r"^(KEY|CD|ID|COD)_", re.I),
+            re.compile(r"^CONTRATO$", re.I),
+            re.compile(r"^ALIENACAO$", re.I),
+        )
+        for tabela in self.tabelas:
+            for coluna in tabela.colunas:
+                summarize = (getattr(coluna, 'sumarizacao', '') or '').lower()
+                if summarize != 'sum':
+                    continue
+                nome = coluna.nome
+                if any(p.search(nome) for p in ID_PATTERNS):
+                    self.colunas_sum_em_id.append((tabela.nome, nome))
 
     def _obter_pasta_modelo(self) -> Path:
         """Retorna o caminho da pasta do modelo conforme o layout"""
@@ -3131,6 +3260,15 @@ class DocumentadorPBIP:
         mime = "image/jpeg" if logo_path.suffix.lower() in {".jpg", ".jpeg"} else "image/png"
         return f"data:{mime};base64,{encoded}"
 
+    def _relacionamentos_usuario(self) -> List:
+        """Relacionamentos relevantes para o usuario (exclui hierarquias automaticas de data: LocalDateTable_/DateTableTemplate_)."""
+        TECNICAS = ('LocalDateTable_', 'DateTableTemplate_')
+        return [
+            r for r in self.relacionamentos
+            if not r.tabela_destino.startswith(TECNICAS)
+            and not r.tabela_origem.startswith(TECNICAS)
+        ]
+
     def gerar_documentacao(self) -> str:
         """
         Gera a documentação em Markdown.
@@ -3238,11 +3376,12 @@ class DocumentadorPBIP:
         # ========================================================================
         # VISÃO GERAL (Página 3+)
         # ========================================================================
+        rel_validos_visao = self._relacionamentos_usuario()
         md.append(f"## 📈 Visão Geral")
         md.append(f"")
         md.append(f"| 📁 Tabelas | 📐 Medidas | 🔢 Colunas | 🧮 Calculadas | 🔗 Relacionamentos | 📄 Páginas |")
         md.append(f"|:----------:|:----------:|:----------:|:-------------:|:-----------------:|:----------:|")
-        md.append(f"| **{len(self.tabelas)}** | **{total_medidas}** | **{total_colunas}** | **{total_calc}** | **{len(self.relacionamentos)}** | **{len(self.paginas)}** |")
+        md.append(f"| **{len(self.tabelas)}** | **{total_medidas}** | **{total_colunas}** | **{total_calc}** | **{len(rel_validos_visao)}** | **{len(self.paginas)}** |")
         md.append(f"")
         md.append(f"---")
         md.append(f"")
@@ -3343,8 +3482,7 @@ class DocumentadorPBIP:
             md.append("")
         # Relacionamentos (Tabela)
         if self.relacionamentos:
-            # Filtra os relacionamentos válidos
-            rel_validos = [r for r in self.relacionamentos if not ('LocalDateTable' in r.tabela_destino or 'DateTableTemplate' in r.tabela_destino)]
+            rel_validos = self._relacionamentos_usuario()
 
             if rel_validos:
                 md.append(f"")
@@ -3464,11 +3602,24 @@ class DocumentadorPBIP:
                 md.append(f"| Nome | Tipo | Sumarização | Oculta |")
                 md.append(f"|:-----|:----:|:-----------:|:------:|")
 
+                colunas_alerta_sum_id: List[str] = []
                 for coluna in tabela.colunas:
                     oculta = "🔴" if coluna.esta_oculta else "⚪"
-                    md.append(f"| `{coluna.nome}` | `{coluna.tipo_dado}` | {coluna.sumarizacao} | {oculta} |")
+                    aviso_sum = ""
+                    if (tabela.nome, coluna.nome) in {(t, c) for t, c in self.colunas_sum_em_id}:
+                        aviso_sum = " ⚠️"
+                        colunas_alerta_sum_id.append(coluna.nome)
+                    md.append(f"| `{coluna.nome}` | `{coluna.tipo_dado}` | {coluna.sumarizacao}{aviso_sum} | {oculta} |")
 
                 md.append(f"")
+                if colunas_alerta_sum_id:
+                    nomes = ", ".join(f"`{n}`" for n in colunas_alerta_sum_id)
+                    md.append(
+                        f"> ⚠️ **Aviso de qualidade**: as colunas {nomes} parecem identificadores "
+                        f"mas estao com sumarizacao `sum`. Pode gerar totais sem sentido nos visuais "
+                        f"(considere alterar para `none` no Power BI Desktop)."
+                    )
+                    md.append(f"")
 
             # Colunas Calculadas - Resumo
             if tabela.colunas_calculadas:
@@ -3499,7 +3650,14 @@ class DocumentadorPBIP:
                     if info_parts:
                         md.append(" | ".join(info_parts))
                         md.append(f"")
-                    adicionar_leitura_dax_markdown(md, analisar_dax(coluna.expressao_dax))
+                    leitura_col = analisar_dax(coluna.expressao_dax)
+                    adicionar_leitura_dax_markdown(md, leitura_col)
+                    adicionar_linhagem_dax_markdown(
+                        md,
+                        leitura_col,
+                        medidas_conhecidas=self.medidas_index,
+                        tabelas_conhecidas=self.tabelas_set,
+                    )
                     md.append(f"```dax")
                     # Verifica se a expressão DAX está vazia ou None
                     if coluna.expressao_dax and str(coluna.expressao_dax).strip():
@@ -3535,7 +3693,16 @@ class DocumentadorPBIP:
                         md.append(f"*{medida.descricao}*")
                         md.append(f"")
 
-                    adicionar_leitura_dax_markdown(md, analisar_dax(medida.expressao_dax))
+                    leitura_medida = analisar_dax(medida.expressao_dax)
+                    adicionar_leitura_dax_markdown(md, leitura_medida)
+                    adicionar_linhagem_dax_markdown(
+                        md,
+                        leitura_medida,
+                        medidas_conhecidas=self.medidas_index,
+                        tabelas_conhecidas=self.tabelas_set,
+                        nome_medida=medida.nome,
+                        medidas_duplicadas=self.medidas_duplicadas,
+                    )
                     md.append(f"```dax")
                     # Verifica se a expressão DAX está vazia ou None
                     if medida.expressao_dax and str(medida.expressao_dax).strip():
@@ -3644,7 +3811,7 @@ class DocumentadorPBIP:
 
         markdown = self.gerar_documentacao()
 
-        with open(caminho_saida, 'w', encoding='utf-8') as f:
+        with open(caminho_saida, 'w', encoding='utf-8-sig') as f:
             f.write(markdown)
 
         print(f"[OK] Documentação MD salva em: {caminho_saida}")
@@ -3803,7 +3970,7 @@ class DocumentadorPBIP:
 
         html = self._gerar_html_documentacao(auto_print=auto_print)
 
-        with open(caminho_saida, 'w', encoding='utf-8') as f:
+        with open(caminho_saida, 'w', encoding='utf-8-sig') as f:
             f.write(html)
 
         print(f"[OK] Documentacao HTML salva em: {caminho_saida}")
@@ -4399,7 +4566,7 @@ class DocumentadorPBIP:
             ("Tabelas", str(len(self.tabelas))),
             ("Medidas DAX", str(total_medidas)),
             ("Colunas", str(total_colunas)),
-            ("Relacionamentos", str(len(self.relacionamentos))),
+            ("Relacionamentos", str(len(self._relacionamentos_usuario()))),
         ]
 
         tbl_info = doc.add_table(rows=len(info_capa), cols=2)
@@ -4525,7 +4692,7 @@ class DocumentadorPBIP:
             ("Medidas", total_medidas),
             ("Colunas", total_colunas),
             ("Calculadas", total_calc),
-            ("Relacionamentos", len(self.relacionamentos)),
+            ("Relacionamentos", len(self._relacionamentos_usuario())),
             ("Páginas", len(self.paginas)),
         ]
 
@@ -4633,12 +4800,7 @@ class DocumentadorPBIP:
         doc.add_heading("Modelo de Dados", level=1)
 
         # Lista de Relacionamentos (exclui tabelas técnicas de calendário, igual ao Markdown)
-        TABELAS_TECNICAS = ('LocalDateTable_', 'DateTableTemplate_')
-        rel_validos_docx = [
-            r for r in self.relacionamentos
-            if not r.tabela_destino.startswith(TABELAS_TECNICAS)
-            and not r.tabela_origem.startswith(TABELAS_TECNICAS)
-        ]
+        rel_validos_docx = self._relacionamentos_usuario()
         if rel_validos_docx:
             doc.add_heading("Lista de Relacionamentos", level=2)
 

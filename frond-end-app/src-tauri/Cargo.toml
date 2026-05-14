@@ -1,6 +1,6 @@
 [package]
 name = "frond-end-app"
-version = "0.7.1"
+version = "0.7.2"
 description = "BI Doc Maker desktop shell"
 authors = ["Math Rosa"]
 edition = "2021"
