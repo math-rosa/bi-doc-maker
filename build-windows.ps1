@@ -5,7 +5,9 @@ param(
     # Requer Windows SDK instalado (signtool.exe no PATH).
     [string]$CertificateThumbprint = "",
     # URL do servidor de timestamp RFC 3161 (gratuitos: sectigo, digicert, globalsign).
-    [string]$TimestampUrl = "http://timestamp.sectigo.com"
+    [string]$TimestampUrl = "http://timestamp.sectigo.com",
+    # Pula a geração do ZIP portatil (so MSI).
+    [switch]$SkipPortable
 )
 
 $ErrorActionPreference = "Stop"
@@ -152,7 +154,99 @@ if (-not [string]::IsNullOrWhiteSpace($CertificateThumbprint)) {
     }
 }
 
+# ============================================================
+# Target portatil: ZIP com tudo necessario, sem instalacao
+# ============================================================
+if (-not $SkipPortable) {
+    Write-Host "==> Gerando ZIP portatil"
+
+    # Versao vem do tauri.conf.json (fonte de verdade do bundle)
+    $TauriConfPath = Join-Path $TauriDir "src-tauri\tauri.conf.json"
+    $TauriConf = Get-Content $TauriConfPath -Raw | ConvertFrom-Json
+    $AppVersion = $TauriConf.package.version
+
+    $ReleaseDir = Join-Path $TauriDir "src-tauri\target\release"
+    $AppExeSource = Join-Path $ReleaseDir "BI Doc Maker.exe"
+    $SidecarReleaseSource = Join-Path $ReleaseDir "$SidecarName.exe"
+
+    if (-not (Test-Path $AppExeSource)) {
+        throw "App principal nao encontrado em $AppExeSource"
+    }
+    if (-not (Test-Path $SidecarReleaseSource)) {
+        throw "Sidecar nao encontrado em $SidecarReleaseSource (esperado depois do tauri:build)"
+    }
+
+    $PortableName = "BI-Doc-Maker-$AppVersion-portable-x64"
+    $DistDir = Join-Path $Root "dist"
+    $PortableStageDir = Join-Path $DistDir $PortableName
+    $PortableZip = Join-Path $DistDir "$PortableName.zip"
+
+    # Limpa staging e zip previos
+    if (Test-Path $PortableStageDir) { Remove-Item -Recurse -Force $PortableStageDir }
+    if (Test-Path $PortableZip) { Remove-Item -Force $PortableZip }
+
+    Write-Host "    Estruturando em $PortableStageDir"
+    New-Item -ItemType Directory -Force $PortableStageDir | Out-Null
+
+    Copy-Item -Force $AppExeSource         (Join-Path $PortableStageDir "BI Doc Maker.exe")
+    Copy-Item -Force $SidecarReleaseSource (Join-Path $PortableStageDir "documentador-core.exe")
+
+    $LicensePath = Join-Path $Root "LICENSE"
+    if (Test-Path $LicensePath) {
+        Copy-Item -Force $LicensePath (Join-Path $PortableStageDir "LICENSE.txt")
+    }
+
+    $ReadmeText = @"
+BI Doc Maker $AppVersion - Versao Portatil
+
+----- Como usar -----
+
+1. Mantenha os arquivos desta pasta JUNTOS. Nao mova so o .exe.
+2. De duplo clique em "BI Doc Maker.exe" para abrir o app.
+
+Nada e instalado no sistema. Para usar em outra maquina, basta copiar
+a pasta inteira. As configuracoes (tema, formatos, branding) ficam
+salvas em %APPDATA%\BI Doc Maker.
+
+----- Requisitos -----
+
+* Windows 10 (build 17763+) ou Windows 11
+* Microsoft Edge WebView2 Runtime (ja vem pre-instalado no Windows 11
+  e no Windows 10 atualizado desde maio/2022).
+
+Se ao abrir aparecer erro sobre WebView2 faltando, instale o
+"Evergreen Standalone Installer" em:
+https://developer.microsoft.com/microsoft-edge/webview2/
+
+----- Suporte -----
+
+Site:    https://math-rosa.github.io/bi-doc-maker/
+Codigo:  https://github.com/math-rosa/bi-doc-maker
+Issues:  https://github.com/math-rosa/bi-doc-maker/issues
+Licenca: MIT (veja LICENSE.txt)
+"@
+    $ReadmeText | Out-File -Encoding UTF8 -FilePath (Join-Path $PortableStageDir "LEIA-ME.txt")
+
+    # Assina as copias portateis se houver certificado
+    if (-not [string]::IsNullOrWhiteSpace($CertificateThumbprint)) {
+        Invoke-Signtool -Path (Join-Path $PortableStageDir "BI Doc Maker.exe") -Thumbprint $CertificateThumbprint -TsaUrl $TimestampUrl -Description "app portatil"
+        Invoke-Signtool -Path (Join-Path $PortableStageDir "documentador-core.exe") -Thumbprint $CertificateThumbprint -TsaUrl $TimestampUrl -Description "sidecar portatil"
+    }
+
+    Write-Host "    Compactando para $PortableZip"
+    Compress-Archive -Path "$PortableStageDir\*" -DestinationPath $PortableZip -CompressionLevel Optimal
+
+    # Limpa staging dir (o zip ja foi gerado)
+    Remove-Item -Recurse -Force $PortableStageDir
+
+    $ZipSize = [math]::Round((Get-Item $PortableZip).Length / 1MB, 2)
+    Write-Host "==> ZIP portatil pronto ($ZipSize MB)"
+}
+
 Write-Host "==> Build Windows concluido"
 if ([string]::IsNullOrWhiteSpace($CertificateThumbprint)) {
     Write-Host "    [INFO] Build sem assinatura. Para assinar, rode com -CertificateThumbprint <SHA1>"
+}
+if ($SkipPortable) {
+    Write-Host "    [INFO] ZIP portatil pulado (-SkipPortable)"
 }
