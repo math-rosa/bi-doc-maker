@@ -53,11 +53,48 @@ class CapturaLogs:
 
 
 def _configurar_stdio() -> None:
+    # Garante UTF-8 nos streams principais.
     for stream in (sys.stdout, sys.stderr):
         try:
             stream.reconfigure(encoding="utf-8", errors="replace")
         except Exception as exc:
             sys.stderr.write(f"[AVISO] Falha ao reconfigurar {stream.name} para utf-8: {exc}\n")
+
+    # Reforco para subprocessos futuros (nao afeta este, mas documenta intencao).
+    import os as _os
+    _os.environ.setdefault("PYTHONIOENCODING", "utf-8")
+    _os.environ.setdefault("PYTHONUTF8", "1")
+
+
+def _fix_mojibake(texto: str) -> str:
+    """Recupera texto que sofreu double-encoding UTF-8 -> cp1252 -> UTF-8.
+
+    Cenario: o sidecar recebeu via argv um JSON ou caminho cujos bytes
+    UTF-8 foram interpretados como cp1252 antes de virar str Python.
+    Sintoma: "Documentação" aparece como "DocumentaÃ§Ã£o" (presença
+    repetida de 'Ã' seguido de outro caractere alto).
+
+    Se nao houver sinais de mojibake, retorna o texto original.
+    """
+    if not isinstance(texto, str) or not texto:
+        return texto
+
+    # Sinal heuristico: presença de 'Ã' (U+00C3) — raro em portugues real
+    # — e que tipicamente acompanha mojibake.
+    if "Ã" not in texto and "Â" not in texto:
+        return texto
+
+    try:
+        # Re-codifica como latin-1 (recupera os bytes UTF-8 originais)
+        # e decodifica como UTF-8 (re-interpreta corretamente).
+        recuperado = texto.encode("latin-1").decode("utf-8")
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        return texto
+
+    # So aplica se reduziu efetivamente o numero de 'Ã' (sinal de melhoria).
+    if recuperado.count("Ã") < texto.count("Ã"):
+        return recuperado
+    return texto
 
 
 def _imprimir_json(payload: Dict) -> None:
@@ -83,18 +120,29 @@ def _analisar(caminho_projeto: str) -> DocumentadorPBIP:
 
 def comando_analyze(args: argparse.Namespace, logs: CapturaLogs) -> Dict:
     with redirect_stdout(logs):
-        doc = _analisar(args.project)
+        project_fixed = _fix_mojibake(args.project)
+        doc = _analisar(project_fixed)
         return doc.gerar_resumo_estruturado(warnings=logs.avisos())
 
 
 def comando_export(args: argparse.Namespace, logs: CapturaLogs) -> Dict:
     with redirect_stdout(logs):
         formatos = _normalizar_formatos(args.formats)
-        output_dir = Path(args.output_dir) / "Doc_BI"
+        # Recupera mojibake potencial em paths e branding antes de usar.
+        project_fixed = _fix_mojibake(args.project)
+        output_dir_raw = _fix_mojibake(args.output_dir)
+        output_dir = Path(output_dir_raw) / "Doc_BI"
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        doc = _analisar(args.project)
-        branding = json.loads(args.branding_json) if args.branding_json else None
+        doc = _analisar(project_fixed)
+        branding_json_fixed = _fix_mojibake(args.branding_json) if args.branding_json else None
+        branding = json.loads(branding_json_fixed) if branding_json_fixed else None
+        if isinstance(branding, dict):
+            # Aplica fix_mojibake em todos os valores de string do branding.
+            branding = {
+                k: _fix_mojibake(v) if isinstance(v, str) else v
+                for k, v in branding.items()
+            }
         doc.aplicar_branding(branding)
         outputs: Dict[str, str] = {}
 

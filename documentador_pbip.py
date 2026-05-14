@@ -582,6 +582,100 @@ def _termo_display(palavras: List[str]) -> str:
     return " ".join(partes)
 
 
+# Traducoes pt-BR para tipos de visuais do PBIR (mapping nativo -> rotulo amigavel).
+# Cobre os visuais padrao do Power BI + nomes mais comuns.
+VISUAL_TYPE_TRANSLATIONS: Dict[str, str] = {
+    "barChart": "Gráfico de Barras",
+    "clusteredBarChart": "Gráfico de Barras Agrupadas",
+    "stackedBarChart": "Gráfico de Barras Empilhadas",
+    "hundredPercentStackedBarChart": "Gráfico de Barras Empilhadas 100%",
+    "columnChart": "Gráfico de Colunas",
+    "clusteredColumnChart": "Gráfico de Colunas Agrupadas",
+    "stackedColumnChart": "Gráfico de Colunas Empilhadas",
+    "hundredPercentStackedColumnChart": "Gráfico de Colunas Empilhadas 100%",
+    "lineChart": "Gráfico de Linhas",
+    "areaChart": "Gráfico de Áreas",
+    "stackedAreaChart": "Gráfico de Áreas Empilhadas",
+    "pieChart": "Gráfico de Pizza",
+    "donutChart": "Gráfico de Rosca",
+    "scatterChart": "Gráfico de Dispersão",
+    "treemap": "Treemap",
+    "card": "Cartão",
+    "cardVisual": "Cartão",
+    "multiRowCard": "Cartão Multilinhas",
+    "kpi": "KPI",
+    "gauge": "Medidor",
+    "slicer": "Segmentação de Dados",
+    "advancedSlicerVisual": "Segmentação Avançada",
+    "tableEx": "Tabela",
+    "pivotTable": "Matriz",
+    "matrix": "Matriz",
+    "map": "Mapa",
+    "filledMap": "Mapa Preenchido",
+    "shapeMap": "Mapa de Formas",
+    "azureMap": "Mapa do Azure",
+    "textbox": "Caixa de Texto",
+    "image": "Imagem",
+    "shape": "Forma",
+    "basicShape": "Forma Básica",
+    "actionButton": "Botão",
+    "lineStackedColumnComboChart": "Combo Linha + Coluna Empilhada",
+    "lineClusteredColumnComboChart": "Combo Linha + Coluna Agrupada",
+    "waterfallChart": "Gráfico de Cascata",
+    "funnel": "Funil",
+    "ribbonChart": "Gráfico de Faixas",
+    "decompositionTreeVisual": "Árvore de Decomposição",
+    "qnaVisual": "Perguntas e Respostas",
+    "keyDriversVisual": "Influenciadores-Chave",
+    "smartNarrativeVisual": "Narrativa Inteligente",
+    "Group": "Grupo",
+    "Unknown": "Tipo desconhecido",
+}
+
+
+# Traducoes para valores de enum do PBIR (tipos de pagina, filtros, etc.).
+PBIR_ENUM_TRANSLATIONS: Dict[str, str] = {
+    "Drillthrough": "Detalhamento",
+    "Normal": "Padrão",
+    "Tooltip": "Dica de Ferramenta",
+    "Categorical": "Categórico",
+    "Exclusion": "Exclusão",
+    "Numeric": "Numérico",
+    "TopN": "Top N",
+    "Advanced": "Avançado",
+    "Tuple": "Tupla",
+    "RelativeDate": "Data Relativa",
+    "RelativeTime": "Tempo Relativo",
+}
+
+
+def traduzir_tipo_visual(tipo: str) -> str:
+    """Converte o id de tipo de visual do PBIR para nome amigavel em pt-BR.
+
+    Custom visuals frequentemente trazem hash GUID no fim, ex:
+    `payPalKPIDonutChart55A431AB15A540ED924ACD72ED8D259F`. Esse hash e
+    removido antes da traducao.
+    """
+    if not tipo or tipo == "-":
+        return tipo
+    # Remove sufixo hexadecimal de 20+ chars (GUID de custom visual).
+    limpo = re.sub(r"[A-F0-9]{20,}$", "", tipo)
+    if limpo in VISUAL_TYPE_TRANSLATIONS:
+        return VISUAL_TYPE_TRANSLATIONS[limpo]
+    # Tipo nao mapeado: tenta separar camelCase em palavras Title-Case.
+    palavras = re.findall(r"[A-Z][a-z]+|[A-Z]+(?=[A-Z][a-z])|[a-z]+|[A-Z]+|\d+", limpo)
+    if palavras:
+        return " ".join(p.title() if p.islower() else p for p in palavras)
+    return limpo
+
+
+def traduzir_enum_pbir(valor: str) -> str:
+    """Traduz valor de enum do PBIR (Drillthrough, Categorical, etc.) para pt-BR."""
+    if not valor:
+        return valor
+    return PBIR_ENUM_TRANSLATIONS.get(valor, valor)
+
+
 def _extrair_termos_texto(texto: str, incluir_frases: bool = True) -> List[Tuple[str, str]]:
     palavras = _separar_palavras_termo(texto)
     if not palavras:
@@ -1230,6 +1324,74 @@ def analisar_dax(expressao: str) -> LeituraDax:
     return leitura
 
 
+def _agrupar_linhas_regra_consecutivas(
+    linhas: List[LinhaRegraPowerQuery], min_grupo: int = 3
+) -> List[LinhaRegraPowerQuery]:
+    """Agrupa N etapas consecutivas com mesma (etapa, regra) numa unica linha.
+
+    Evita poluir a tabela com 25x a mesma linha 'Text.Replace' quando a query
+    aplica varias substituicoes em sequencia. A descricao da linha agrupada
+    cita o intervalo de nomes (`t1` ... `t25`) e indica o total.
+    """
+    if len(linhas) < min_grupo:
+        return linhas
+
+    resultado: List[LinhaRegraPowerQuery] = []
+    i = 0
+    while i < len(linhas):
+        atual = linhas[i]
+        j = i + 1
+        while (
+            j < len(linhas)
+            and linhas[j].etapa == atual.etapa
+            and linhas[j].regra == atual.regra
+        ):
+            j += 1
+
+        count = j - i
+        if count >= min_grupo:
+            nomes_etapas: List[str] = []
+            for k in range(i, j):
+                m = re.search(r"`([^`]+)`", linhas[k].descricao)
+                if m:
+                    nomes_etapas.append(m.group(1))
+
+            if not nomes_etapas:
+                nova_desc = (
+                    f"Aplicado {count} vezes consecutivas. "
+                    "Detalhes no codigo fonte abaixo."
+                )
+            elif count <= 4:
+                nomes_str = ", ".join(f"`{n}`" for n in nomes_etapas)
+                nova_desc = (
+                    f"Aplicado {count} vezes consecutivas em: {nomes_str}. "
+                    "Detalhes no codigo fonte abaixo."
+                )
+            else:
+                primeira = nomes_etapas[0]
+                ultima = nomes_etapas[-1]
+                nova_desc = (
+                    f"Aplicado {count} vezes consecutivas "
+                    f"(`{primeira}` ... `{ultima}`). "
+                    "Detalhes no codigo fonte abaixo."
+                )
+
+            resultado.append(
+                LinhaRegraPowerQuery(
+                    etapa=atual.etapa,
+                    regra=atual.regra,
+                    descricao=nova_desc,
+                )
+            )
+        else:
+            for k in range(i, j):
+                resultado.append(linhas[k])
+
+        i = j
+
+    return resultado
+
+
 def regra_power_query_tem_conteudo(regra: RegraPowerQuery) -> bool:
     return any([
         regra.observacoes,
@@ -1280,7 +1442,8 @@ def adicionar_regra_power_query_markdown(md: List[str], regra: RegraPowerQuery) 
         md.append("")
         md.append("| Etapa | Regra / Filtro | Descrição |")
         md.append("|---|---|---|")
-        for linha in regra.linhas_regra:
+        linhas_agrupadas = _agrupar_linhas_regra_consecutivas(regra.linhas_regra)
+        for linha in linhas_agrupadas:
             md.append(
                 f"| {escape_table(linha.etapa)} "
                 f"| {escape_table(linha.regra)} "
@@ -1290,21 +1453,37 @@ def adicionar_regra_power_query_markdown(md: List[str], regra: RegraPowerQuery) 
 
 
 def adicionar_leitura_dax_markdown(md: List[str], leitura: LeituraDax) -> None:
-    if not leitura.itens:
+    """Versao compacta: lista apenas funcoes usadas, sem repetir o glossario.
+
+    O glossario completo de cada funcao DAX e exibido uma unica vez na secao
+    "Glossario DAX" no inicio do documento. Aqui mostramos apenas a lista
+    de funcoes usadas nesta expressao, agrupadas por categoria.
+    """
+    if not leitura.funcoes:
         return
-    md.append("**Leitura técnica DAX**")
+    md.append("**Funções DAX usadas**")
     md.append("")
     if leitura.categorias:
+        # Para cada categoria, lista as funcoes (sem descricao - vai no glossario).
         for categoria in DAX_CATEGORY_ORDER:
             itens = leitura.categorias.get(categoria, [])
             if not itens:
                 continue
-            md.append(f"- **{DAX_CATEGORY_LABELS.get(categoria, categoria.title())}**")
+            # Extrai apenas o nome da funcao do inicio de cada item (ex: "CALCULATE: ...")
+            nomes_funcao = []
             for item in itens:
-                md.append(f"  - {item}")
+                if ":" in item:
+                    nome = item.split(":", 1)[0].strip()
+                    # Remove backticks se houver
+                    nome = nome.replace("`", "")
+                    nomes_funcao.append(f"`{nome}`")
+            if nomes_funcao:
+                label = DAX_CATEGORY_LABELS.get(categoria, categoria.title())
+                md.append(f"- **{label}**: {', '.join(nomes_funcao)}")
     else:
-        for item in leitura.itens:
-            md.append(f"- {item}")
+        # Fallback: lista funcoes diretamente
+        funcoes_str = ", ".join(f"`{f}`" for f in leitura.funcoes)
+        md.append(f"- {funcoes_str}")
     md.append("")
 
 
@@ -2090,7 +2269,7 @@ class DocumentadorPBIP:
                                 largura=section_data.get('width', 1280),
                                 altura=section_data.get('height', 720),
                                 opcao_exibicao=display_opt,
-                                tipo='Drillthrough' if section_data.get('pageBinding') else 'Normal',
+                                tipo=traduzir_enum_pbir('Drillthrough' if section_data.get('pageBinding') else 'Normal'),
                                 filtros=section_data.get('filterConfig', {}).get('filters') if section_data.get('filterConfig') else None
                             )
 
@@ -2126,7 +2305,7 @@ class DocumentadorPBIP:
                                 largura=page_data.get('width', 1280),
                                 altura=page_data.get('height', 720),
                                 opcao_exibicao=page_data.get('displayOption', 'FitToPage'),
-                                tipo='Drillthrough' if page_data.get('pageBinding') else 'Normal',
+                                tipo=traduzir_enum_pbir('Drillthrough' if page_data.get('pageBinding') else 'Normal'),
                                 filtros=page_data.get('filterConfig', {}).get('filters') if page_data.get('filterConfig') else None
                             )
 
@@ -2264,7 +2443,7 @@ class DocumentadorPBIP:
                 campos_visual = self._extrair_campos_visual_config(config)
 
                 pagina.visuais.append(InfoVisual(
-                    tipo=tipo_visual,
+                    tipo=traduzir_tipo_visual(tipo_visual),
                     titulo=titulo if titulo else "-",
                     nome=visual_dir.name,
                     campos=campos_visual,
@@ -2399,7 +2578,7 @@ class DocumentadorPBIP:
                     resultado.append({
                         'tabela': tabela,
                         'coluna': coluna,
-                        'tipo': tipo_filtro,
+                        'tipo': traduzir_enum_pbir(tipo_filtro),
                         'valores': valores
                     })
             except Exception:
@@ -2613,8 +2792,139 @@ class DocumentadorPBIP:
             termo.exemplos = termo.exemplos[:4]
 
         dicionario.sort(key=lambda t: (-t.score, -t.frequencia, t.termo.lower()))
+        dicionario = self._deduplicar_termos_dicionario(dicionario)
         self._dicionario_cache = dicionario
         return dicionario[:limite]
+
+    def _coletar_funcoes_dax_usadas(self) -> List[str]:
+        """Varre todas as expressoes DAX do projeto e retorna a lista de funcoes
+        unicas usadas (medidas + colunas calculadas + tabelas DAX)."""
+        funcoes_set: set = set()
+        for tabela in self.tabelas:
+            for medida in tabela.medidas:
+                if medida.expressao_dax:
+                    leitura = analisar_dax(medida.expressao_dax)
+                    funcoes_set.update(leitura.funcoes)
+            for col_calc in tabela.colunas_calculadas:
+                if col_calc.expressao_dax:
+                    leitura = analisar_dax(col_calc.expressao_dax)
+                    funcoes_set.update(leitura.funcoes)
+            # Tabelas geradas via DAX (fonte_codigo DAX)
+            if tabela.particao and tabela.particao.codigo_fonte:
+                if _codigo_fonte_eh_dax(tabela.particao.codigo_fonte):
+                    leitura = analisar_dax(tabela.particao.codigo_fonte)
+                    funcoes_set.update(leitura.funcoes)
+        return sorted(funcoes_set)
+
+    def _gerar_glossario_dax_markdown(self, md: List[str]) -> None:
+        """Insere uma secao 'Glossario DAX' com todas as funcoes usadas
+        agrupadas por categoria. Substitui a repeticao de descricoes em
+        cada medida individual."""
+        funcoes_usadas = self._coletar_funcoes_dax_usadas()
+        if not funcoes_usadas:
+            return
+
+        # Agrupa por categoria conforme catalogo
+        por_categoria: Dict[str, List[CatalogoFuncao]] = {}
+        for nome in funcoes_usadas:
+            entrada = DAX_FUNCTION_CATALOG.get(nome)
+            if not entrada:
+                continue
+            por_categoria.setdefault(entrada.categoria, []).append(entrada)
+
+        if not por_categoria:
+            return
+
+        md.append("## 📐 Glossário DAX")
+        md.append("")
+        md.append(
+            "> Funções DAX usadas em medidas, colunas calculadas e tabelas "
+            "deste projeto. Cada medida individual abaixo lista apenas os "
+            "nomes das funções — a descrição completa fica aqui."
+        )
+        md.append("")
+        md.append("| Função | Categoria | Descrição | Leitura de negócio |")
+        md.append("|---|---|---|---|")
+        for categoria in DAX_CATEGORY_ORDER:
+            entradas = por_categoria.get(categoria, [])
+            if not entradas:
+                continue
+            label = DAX_CATEGORY_LABELS.get(categoria, categoria.title())
+            for entrada in sorted(entradas, key=lambda e: e.nome):
+                md.append(
+                    f"| `{entrada.nome}` "
+                    f"| {label} "
+                    f"| {entrada.descricao} "
+                    f"| {entrada.leitura_negocio} |"
+                )
+        # Categorias fora da ordem padrao (caso existam)
+        for categoria, entradas in por_categoria.items():
+            if categoria in DAX_CATEGORY_ORDER:
+                continue
+            label = DAX_CATEGORY_LABELS.get(categoria, categoria.title())
+            for entrada in sorted(entradas, key=lambda e: e.nome):
+                md.append(
+                    f"| `{entrada.nome}` "
+                    f"| {label} "
+                    f"| {entrada.descricao} "
+                    f"| {entrada.leitura_negocio} |"
+                )
+        md.append("")
+        md.append("---")
+        md.append("")
+
+    def _deduplicar_termos_dicionario(
+        self, termos: List["TermoDicionario"]
+    ) -> List["TermoDicionario"]:
+        """Remove termos redundantes (substrings/superstrings com freq similar).
+
+        Ex: 'GLA EXIGENCIAS' (14), 'TS GLA EXIGENCIAS' (14), 'TS GLA' (12),
+        'GLA' (12) - mantem so o mais longo, que preserva mais contexto.
+        Termos com frequencias muito diferentes (ratio < 0.75) sao preservados
+        ambos (ex: 'Receita' 40 e 'Receita Realizada' 8 sao termos distintos).
+        """
+        if len(termos) <= 1:
+            return termos
+
+        # Ordena por comprimento DESC (preferir nome mais longo), depois score DESC.
+        # Isso garante que processamos primeiro a forma mais informativa.
+        candidatos = sorted(
+            termos,
+            key=lambda t: (-len(t.termo), -t.score, -t.frequencia),
+        )
+
+        mantidos: List["TermoDicionario"] = []
+        for termo in candidatos:
+            chave_norm = termo.termo.lower().strip()
+            if not chave_norm:
+                continue
+
+            eh_redundante = False
+            for ja in mantidos:
+                ja_norm = ja.termo.lower().strip()
+                # Considera "mesma familia" se um termo eh substring do outro
+                # (limitado a palavras, nao caracteres dentro de palavra).
+                eh_substring = (
+                    f" {chave_norm} " in f" {ja_norm} "
+                    or chave_norm == ja_norm
+                    or ja_norm.startswith(chave_norm + " ")
+                    or ja_norm.endswith(" " + chave_norm)
+                )
+                if not eh_substring:
+                    continue
+                # Frequencia similar (>=75% do maximo) -> redundante.
+                max_freq = max(ja.frequencia, termo.frequencia)
+                min_freq = min(ja.frequencia, termo.frequencia)
+                if max_freq > 0 and (min_freq / max_freq) >= 0.75:
+                    eh_redundante = True
+                    break
+
+            if not eh_redundante:
+                mantidos.append(termo)
+
+        # Re-ordena pelo criterio original (score/frequencia).
+        mantidos.sort(key=lambda t: (-t.score, -t.frequencia, t.termo.lower()))
+        return mantidos
 
     def _limpar_nome_mermaid(self, nome: str) -> str:
         import re
@@ -2643,13 +2953,12 @@ class DocumentadorPBIP:
                 continue
             nome_tab = self._limpar_nome_mermaid(tabela.nome)
             mermaid.append(f"    {nome_tab} {{")
-            # Limite de colunas para o diagrama não ficar gigantesco (Top 10)
-            for col in tabela.colunas[:10]:
+            # Limite de colunas no diagrama (top 12 para nao ficar gigantesco).
+            # Se houver mais, omite silenciosamente (lista completa esta no detalhamento).
+            for col in tabela.colunas[:12]:
                 tipo = self._limpar_nome_mermaid(col.tipo_dado or "string")
                 nome_col = self._limpar_nome_mermaid(col.nome)
                 mermaid.append(f"        {tipo} {nome_col}")
-            if len(tabela.colunas) > 10:
-                mermaid.append("        string outras_colunas_ocultas")
             mermaid.append("    }")
 
         # Adiciona as ligações (relacionamentos)
@@ -2964,6 +3273,9 @@ class DocumentadorPBIP:
             md.append("")
             md.append("---")
             md.append("")
+
+        # Glossario DAX consolidado (uma vez para todo o documento).
+        self._gerar_glossario_dax_markdown(md)
 
         md.append(f"## 📄 Páginas do Relatório")
         md.append(f"")
@@ -3931,13 +4243,14 @@ class DocumentadorPBIP:
             if regra.linhas_regra:
                 h_regras = doc.add_heading("Regras de Negócio e Filtros — Power Query", level=4)
                 h_regras.paragraph_format.space_before = Pt(4)
+                linhas_agrupadas = _agrupar_linhas_regra_consecutivas(regra.linhas_regra)
                 rows = [
                     [
                         linha.etapa.replace("`", ""),
                         linha.regra.replace("`", ""),
                         linha.descricao.replace("`", ""),
                     ]
-                    for linha in regra.linhas_regra
+                    for linha in linhas_agrupadas
                 ]
                 _add_table(["Etapa", "Regra / Filtro", "Descrição"], rows, compact=True)
 
