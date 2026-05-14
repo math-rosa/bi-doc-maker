@@ -1,0 +1,44 @@
+# UTF-8
+#
+# Metadata para VS_VERSION_INFO embutido no documentador-core.exe.
+# Usado pelo PyInstaller via flag --version-file.
+# Reduz falsos positivos de antivirus porque o binario passa a ter
+# CompanyName, FileDescription, etc. (executaveis sem metadados sao
+# vistos como suspeitos por varios scanners heuristicos).
+#
+# Atualizar `filevers`, `prodvers`, `FileVersion` e `ProductVersion`
+# a cada bump de versao no package.json/Cargo.toml/tauri.conf.json.
+
+VSVersionInfo(
+  ffi=FixedFileInfo(
+    filevers=(0, 6, 0, 0),
+    prodvers=(0, 6, 0, 0),
+    mask=0x3f,
+    flags=0x0,
+    OS=0x40004,
+    fileType=0x1,
+    subtype=0x0,
+    date=(0, 0)
+  ),
+  kids=[
+    StringFileInfo(
+      [
+        StringTable(
+          u'041604B0',
+          [
+            StringStruct(u'CompanyName', u'Math Rosa'),
+            StringStruct(u'FileDescription', u'BI Doc Maker - Power BI PBIP Documentation Engine'),
+            StringStruct(u'FileVersion', u'0.6.0.0'),
+            StringStruct(u'InternalName', u'documentador-core'),
+            StringStruct(u'LegalCopyright', u'Copyright (c) 2025 Math Rosa. MIT License.'),
+            StringStruct(u'OriginalFilename', u'documentador-core.exe'),
+            StringStruct(u'ProductName', u'BI Doc Maker'),
+            StringStruct(u'ProductVersion', u'0.6.0'),
+            StringStruct(u'Comments', u'CLI sidecar do app desktop BI Doc Maker. Le projetos .pbip e gera documentacao tecnica em Markdown/Word/HTML.')
+          ]
+        )
+      ]
+    ),
+    VarFileInfo([VarStruct(u'Translation', [1046, 1200])])
+  ]
+)

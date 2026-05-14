@@ -202,6 +202,51 @@ Também existe o comando de diagnóstico:
 
 No PowerShell, mantenha `--formats "md,docx,html"` entre aspas.
 
+## Antivírus e Windows SmartScreen
+
+O BI Doc Maker é distribuído **sem certificado Authenticode** (assinatura digital paga). Como o sidecar Python é empacotado via PyInstaller — tecnologia usada também por programas maliciosos — alguns antivírus podem mostrar alertas durante a instalação ou execução. **O app é seguro** e roda 100% local (não envia dados para lugar nenhum).
+
+### O que esperar
+
+1. **Windows SmartScreen** no primeiro `.exe`: clique em *Mais informações* → *Executar mesmo assim*.
+2. **Avast / McAfee / Kaspersky / Trend Micro**: podem flagrar o `documentador-core.exe` (o sidecar Python). Adicione exceção ou submeta como falso positivo ao seu fornecedor.
+
+### Como verificar integridade do download
+
+Toda release no GitHub publica o **SHA256** do `.msi` nas notas. Confira com:
+
+```powershell
+Get-FileHash ".\BI Doc Maker_X.Y.Z_x64_en-US.msi" -Algorithm SHA256
+```
+
+O hash da sua cópia local deve bater com o publicado na release.
+
+### Para mantenedores: reduzindo falsos positivos
+
+O `build-windows.ps1` já aplica algumas mitigações:
+
+- `--noupx`: evita o packer UPX (binários UPX-compressed são fortemente flagrados).
+- `--version-file version-info.txt`: embute metadata Windows (CompanyName, FileDescription, etc.) — executáveis sem metadata são considerados suspeitos.
+- `Assert-LastExitCode`: falha rápida em qualquer step quebrado, evitando entregar binário corrompido.
+
+Para reduzir AINDA mais os alertas (passo opcional, recomendado antes de release pública):
+
+```powershell
+.\rebuild-pyinstaller.ps1
+```
+
+Este script rebuilda o **bootloader do PyInstaller a partir do código-fonte**. O bootloader stock (distribuído via pip) tem hash conhecido por vários AVs heurísticos. Rebuildando localmente, o hash muda e o binário deixa de bater com essas assinaturas. Requer Visual Studio Build Tools instalado.
+
+Para assinar o sidecar e o MSI com certificado Authenticode (quando disponível):
+
+```powershell
+.\build-windows.ps1 -CertificateThumbprint <SHA1-DO-CERT>
+```
+
+O script chama `signtool` em ambos os binários (sidecar + MSI) com timestamp RFC 3161. A integração com Tauri também pode ser configurada via `tauri.conf.json.bundle.windows.certificateThumbprint`.
+
+**Roadmap**: a partir de uma versão futura, todos os artefatos serão assinados com EV (Extended Validation) Authenticode, eliminando o SmartScreen e a maior parte dos alertas de AV.
+
 ## Validação Recomendada
 
 ```powershell
