@@ -4497,41 +4497,34 @@ class DocumentadorPBIP:
             if not regra_power_query_tem_conteudo(regra):
                 return
 
-            h = doc.add_heading("Regra de Negócio Inferida", level=3)
+            h = doc.add_heading(_t("docx.section.business_rule_inferred"), level=3)
             h.paragraph_format.space_before = Pt(8)
-            _add_info_box(
-                "Leitura offline inferida a partir das etapas do Power Query M. "
-                "Para compreensão completa da regra, consulte o código M original exibido abaixo.",
-                "info",
-            )
+            _add_info_box(_t("docx.info.pq_intro"), "info")
 
             if regra.observacoes:
-                _add_info_box(
-                    "Comentários BI_DOC são tratados como documentação oficial e aparecem antes da inferência automática.",
-                    "info",
-                )
+                _add_info_box(_t("docx.info.pq_observations_intro"), "info")
                 itens_doc = []
                 rotulos = {
-                    "geral": "Geral",
-                    "origem": "Origem",
-                    "regra": "Regra",
-                    "observacao": "Observação",
+                    "geral": _t("pq.obs.general"),
+                    "origem": _t("pq.obs.source"),
+                    "regra": _t("pq.obs.rule"),
+                    "observacao": _t("pq.obs.observation"),
                 }
                 for chave, valores in regra.observacoes.items():
                     for valor in valores:
                         itens_doc.append(f"{rotulos.get(chave, chave.title())}: {valor}")
-                _add_bullet_list("Observações Documentadas", itens_doc)
+                _add_bullet_list(_t("docx.pq.documented_observations"), itens_doc)
 
             if regra.linhas_regra:
                 resumo = _resumir_etapas_power_query(regra.linhas_regra)
                 if resumo:
                     p_resumo = doc.add_paragraph()
-                    run_lbl = p_resumo.add_run("Esta tabela aplica: ")
+                    run_lbl = p_resumo.add_run(_t("docx.pq.summary_label") + ": ")
                     run_lbl.bold = True
                     p_resumo.add_run(f"{resumo}.")
                     p_resumo.paragraph_format.space_before = Pt(4)
                     p_resumo.paragraph_format.space_after = Pt(4)
-                h_regras = doc.add_heading("Regras de Negócio e Filtros — Power Query", level=4)
+                h_regras = doc.add_heading(_t("docx.section.pq_rules"), level=4)
                 h_regras.paragraph_format.space_before = Pt(4)
                 linhas_agrupadas = _agrupar_linhas_regra_consecutivas(regra.linhas_regra)
                 rows = [
@@ -4542,7 +4535,15 @@ class DocumentadorPBIP:
                     ]
                     for linha in linhas_agrupadas
                 ]
-                _add_table(["Etapa", "Regra / Filtro", "Descrição"], rows, compact=True)
+                _add_table(
+                    [
+                        _t("docx.tcol.step"),
+                        _t("docx.tcol.rule_or_filter"),
+                        _t("docx.tcol.description"),
+                    ],
+                    rows,
+                    compact=True,
+                )
 
         def _add_leitura_dax_docx(leitura: LeituraDax):
             linhas = []
@@ -4686,10 +4687,10 @@ class DocumentadorPBIP:
 
         # Estatísticas resumidas na capa
         info_capa = [
-            ("Tabelas", str(len(self.tabelas))),
-            ("Medidas DAX", str(total_medidas)),
-            ("Colunas", str(total_colunas)),
-            ("Relacionamentos", str(len(self._relacionamentos_usuario()))),
+            (_t("docx.stat.tables"), str(len(self.tabelas))),
+            (_t("docx.stat.measures_dax"), str(total_medidas)),
+            (_t("docx.stat.columns"), str(total_colunas)),
+            (_t("docx.stat.relationships"), str(len(self._relacionamentos_usuario()))),
         ]
 
         tbl_info = doc.add_table(rows=len(info_capa), cols=2)
@@ -4714,7 +4715,7 @@ class DocumentadorPBIP:
         # ====================================================================
         # SUMÁRIO (Table of Contents)
         # ====================================================================
-        h_toc = doc.add_heading("Sumário", level=1)
+        h_toc = doc.add_heading(_t("docx.toc.title"), level=1)
 
         # Insere campo TOC do Word (atualizado ao abrir o documento)
         p_toc = doc.add_paragraph()
@@ -4804,19 +4805,19 @@ class DocumentadorPBIP:
         # ====================================================================
         # VISÃO GERAL
         # ====================================================================
-        doc.add_heading("Visão Geral", level=1)
+        doc.add_heading(_t("docx.section.overview"), level=1)
 
         # Cards de estatísticas em tabela 2x3
         stats_table = doc.add_table(rows=2, cols=3)
         stats_table.alignment = WD_TABLE_ALIGNMENT.CENTER
 
         stats_data = [
-            ("Tabelas", len(self.tabelas)),
-            ("Medidas", total_medidas),
-            ("Colunas", total_colunas),
-            ("Calculadas", total_calc),
-            ("Relacionamentos", len(self._relacionamentos_usuario())),
-            ("Páginas", len(self.paginas)),
+            (_t("docx.stat.tables"), len(self.tabelas)),
+            (_t("docx.stat.measures"), total_medidas),
+            (_t("docx.stat.columns"), total_colunas),
+            (_t("docx.stat.calc_columns"), total_calc),
+            (_t("docx.stat.relationships"), len(self._relacionamentos_usuario())),
+            (_t("docx.stat.pages"), len(self.paginas)),
         ]
 
         for idx, (label, value) in enumerate(stats_data):
@@ -4852,7 +4853,7 @@ class DocumentadorPBIP:
             p_dim.alignment = WD_ALIGN_PARAGRAPH.CENTER
             p_dim.paragraph_format.space_before = Pt(10)
             p_dim.paragraph_format.space_after = Pt(4)
-            run_dim_lbl = p_dim.add_run("Modelo dimensional: ")
+            run_dim_lbl = p_dim.add_run(_t("docx.stat.dimensional_label") + ": ")
             _set_run_font(run_dim_lbl, FONT_MAIN, FONT_TABLE, AZUL_PRI, bold=True)
             # _resumo_modelo_dimensional retorna markdown com **; converte para texto puro
             texto_limpo = resumo_dim.replace("**", "")
@@ -4861,12 +4862,8 @@ class DocumentadorPBIP:
 
         if dicionario_dados:
             _add_separator()
-            doc.add_heading("Dicionário de Dados e Termos", level=1)
-            _add_info_box(
-                "Leitura offline inferida a partir dos metadados do PBIP. "
-                "O dicionário não usa dados reais das tabelas e deve ser validado com a área de negócio.",
-                "info",
-            )
+            doc.add_heading(_t("docx.section.dictionary"), level=1)
+            _add_info_box(_t("docx.info.dict_intro"), "info")
             rows_dic = []
             for termo in dicionario_dados:
                 rows_dic.append([
@@ -4877,7 +4874,13 @@ class DocumentadorPBIP:
                     "; ".join(termo.exemplos[:3]) or "—",
                 ])
             _add_table(
-                ["Termo", "Ocorrências", "Categoria", "Onde aparece", "Exemplos"],
+                [
+                    _t("docx.tcol.term"),
+                    _t("docx.tcol.frequency"),
+                    _t("docx.tcol.category"),
+                    _t("docx.tcol.sources"),
+                    _t("docx.tcol.examples"),
+                ],
                 rows_dic,
                 compact=True,
             )
@@ -4887,17 +4890,26 @@ class DocumentadorPBIP:
         # ====================================================================
         # PÁGINAS DO RELATÓRIO
         # ====================================================================
-        doc.add_heading("Páginas do Relatório", level=1)
+        doc.add_heading(_t("docx.section.pages"), level=1)
 
         if self.paginas:
-            _add_info_box(f"O relatório contém {len(self.paginas)} página(s).", "success")
+            _add_info_box(_t("docx.info.pages_count", n=len(self.paginas)), "success")
             rows_pag = []
             for i, pagina in enumerate(self.paginas, 1):
                 dimensoes = f"{pagina.largura} × {pagina.altura}"
                 filtros_interpretados = self._interpretar_filtros_pagina(pagina.filtros) if pagina.filtros else []
                 qtd = str(len(filtros_interpretados)) if filtros_interpretados else "—"
                 rows_pag.append([str(i), pagina.nome_exibicao, pagina.tipo, dimensoes, qtd])
-            _add_table(["#", "Nome da Página", "Tipo", "Dimensões", "Filtros"], rows_pag)
+            _add_table(
+                [
+                    _t("docx.tcol.idx"),
+                    _t("docx.tcol.page_name"),
+                    _t("docx.tcol.page_type"),
+                    _t("docx.tcol.dimensions"),
+                    _t("docx.tcol.filters"),
+                ],
+                rows_pag,
+            )
 
             # Detalhamento dos filtros por página
             paginas_com_filtros = [
@@ -4907,7 +4919,7 @@ class DocumentadorPBIP:
             paginas_com_filtros = [(p, f) for p, f in paginas_com_filtros if f]
 
             if paginas_com_filtros:
-                doc.add_heading("Filtros de Página", level=2)
+                doc.add_heading(_t("docx.section.page_filters"), level=2)
 
                 for pagina, filtros in paginas_com_filtros:
                     p_nome = doc.add_paragraph()
@@ -4920,12 +4932,19 @@ class DocumentadorPBIP:
                     for f in filtros:
                         valores_str = ', '.join(f['valores']) if f['valores'] else '—'
                         rows_filt.append([f['tabela'], f['coluna'], f['tipo'], valores_str])
-                    _add_table(["Tabela", "Coluna", "Tipo", "Valores"], rows_filt, compact=True)
+                    _add_table(
+                        [
+                            _t("docx.tcol.table"),
+                            _t("docx.tcol.column"),
+                            _t("docx.tcol.type"),
+                            _t("docx.tcol.values"),
+                        ],
+                        rows_filt,
+                        compact=True,
+                    )
         else:
             _add_info_box(
-                "Nenhuma página encontrada localmente. Este projeto pode ser um "
-                "relatório remoto (thin report) onde as páginas ficam armazenadas "
-                "no serviço Power BI.",
+                _t("docx.info.pages_empty_thin_report"),
                 "warning"
             )
 
@@ -4934,42 +4953,49 @@ class DocumentadorPBIP:
         # ====================================================================
         # MODELO DE DADOS
         # ====================================================================
-        doc.add_heading("Modelo de Dados", level=1)
+        doc.add_heading(_t("docx.section.model"), level=1)
 
         # Lista de Relacionamentos (exclui tabelas técnicas de calendário, igual ao Markdown)
         rel_validos_docx = self._relacionamentos_usuario()
         if rel_validos_docx:
-            doc.add_heading("Lista de Relacionamentos", level=2)
+            doc.add_heading(_t("docx.section.relationships_list"), level=2)
 
             _add_info_box(
-                f"O modelo possui {len(rel_validos_docx)} relacionamentos entre tabelas.",
-                "info"
+                _t("docx.info.rel_count", n=len(rel_validos_docx)),
+                "info",
             )
 
             rows_rel = []
             for rel in rel_validos_docx:
                 origem = f"{rel.tabela_origem}.{rel.coluna_origem}"
                 destino = f"{rel.tabela_destino}.{rel.coluna_destino}"
-                bidi = "Sim" if rel.filtro_bidirecional else "Não"
-                ativo = "Sim" if rel.esta_ativo else "Não"
+                bidi = _t("docx.value.yes") if rel.filtro_bidirecional else _t("docx.value.no")
+                ativo = _t("docx.value.yes") if rel.esta_ativo else _t("docx.value.no")
                 rows_rel.append([origem, "→", destino, bidi, ativo])
 
             _add_table(
-                ["Origem", "", "Destino", "Bidirecional", "Ativo"],
-                rows_rel, compact=True
+                [
+                    _t("docx.rel.col.from"),
+                    "",
+                    _t("docx.rel.col.to"),
+                    _t("docx.rel.col.bidirectional"),
+                    _t("docx.rel.col.active"),
+                ],
+                rows_rel,
+                compact=True,
             )
 
         # Grupos de Consulta
         if self.info_modelo.grupos_consulta:
-            doc.add_heading("Grupos de Consulta", level=2)
+            doc.add_heading(_t("docx.section.query_groups"), level=2)
             rows_gq = [[g['nome'], str(g['ordem'])] for g in sorted(self.info_modelo.grupos_consulta, key=lambda x: x['ordem'])]
-            _add_table(["Nome", "Ordem"], rows_gq)
+            _add_table([_t("docx.tcol.gq_name"), _t("docx.tcol.gq_order")], rows_gq)
 
         # ====================================================================
         # RESUMO DAS TABELAS
         # ====================================================================
         doc.add_page_break()
-        doc.add_heading("Resumo das Tabelas", level=1)
+        doc.add_heading(_t("docx.section.tables_summary"), level=1)
 
         p = doc.add_paragraph()
         run = p.add_run(f"O modelo contém {len(self.tabelas)} tabelas com {total_colunas} colunas, "
@@ -5001,7 +5027,7 @@ class DocumentadorPBIP:
         # DETALHAMENTO DAS TABELAS
         # ====================================================================
         doc.add_page_break()
-        doc.add_heading("Detalhamento das Tabelas", level=1)
+        doc.add_heading(_t("docx.section.tables_detail"), level=1)
 
         for idx, tabela in enumerate(self.tabelas, 1):
             # Separador entre tabelas (exceto a primeira)
@@ -5021,33 +5047,48 @@ class DocumentadorPBIP:
                 _set_run_font(r_desc, FONT_MAIN, FONT_BODY, CINZA_LT, italic=True)
 
             # Card de metadados
-            status = "Visível" if not tabela.esta_oculta else "Oculta"
-            refresh = "Sim" if not tabela.excluida_refresh else "Não"
-            fonte_tipo = "Importação"
+            status = _t("docx.tcard.status_visible") if not tabela.esta_oculta else _t("docx.tcard.status_hidden")
+            refresh = _t("docx.value.yes") if not tabela.excluida_refresh else _t("docx.value.no")
+            fonte_tipo = _t("docx.tcard.source_import")
             if tabela.particao:
                 if tabela.particao.grupo_consulta:
                     fonte_tipo = tabela.particao.grupo_consulta
                 elif tabela.particao.codigo_fonte and _codigo_fonte_eh_dax(tabela.particao.codigo_fonte):
-                    fonte_tipo = "DAX"
+                    fonte_tipo = _t("docx.tcard.source_dax")
 
             _add_table(
-                ["Status", "Atualização", "Colunas", "Medidas", "Fonte"],
-                [[status, refresh, str(len(tabela.colunas)), str(len(tabela.medidas)), fonte_tipo]]
+                [
+                    _t("docx.tcard.status"),
+                    _t("docx.tcard.refresh"),
+                    _t("docx.tcard.columns"),
+                    _t("docx.tcard.measures"),
+                    _t("docx.tcard.source"),
+                ],
+                [[status, refresh, str(len(tabela.colunas)), str(len(tabela.medidas)), fonte_tipo]],
             )
 
             # Colunas
             if tabela.colunas:
-                h = doc.add_heading("Colunas", level=3)
+                h = doc.add_heading(_t("docx.section.columns"), level=3)
                 h.paragraph_format.space_before = Pt(8)
                 rows_col = []
                 for col in tabela.colunas:
-                    oculta = "Sim" if col.esta_oculta else "Não"
+                    oculta = _t("docx.value.yes") if col.esta_oculta else _t("docx.value.no")
                     rows_col.append([col.nome, col.tipo_dado, col.sumarizacao, oculta])
-                _add_table(["Nome", "Tipo", "Sumarização", "Oculta"], rows_col, compact=True)
+                _add_table(
+                    [
+                        _t("docx.tcol.col_name"),
+                        _t("docx.tcol.col_type"),
+                        _t("docx.tcol.summarization"),
+                        _t("docx.tcol.hidden"),
+                    ],
+                    rows_col,
+                    compact=True,
+                )
 
             # Colunas Calculadas
             if tabela.colunas_calculadas:
-                h = doc.add_heading("Colunas Calculadas", level=3)
+                h = doc.add_heading(_t("docx.section.calc_columns"), level=3)
                 h.paragraph_format.space_before = Pt(8)
                 for coluna in tabela.colunas_calculadas:
                     _add_dax_object_header(
@@ -5062,7 +5103,7 @@ class DocumentadorPBIP:
 
             # Medidas
             if tabela.medidas:
-                h = doc.add_heading("Medidas DAX", level=3)
+                h = doc.add_heading(_t("docx.section.measures_dax"), level=3)
                 h.paragraph_format.space_before = Pt(8)
 
                 # Tabela resumo (Nome + Tipo inferido)
@@ -5074,10 +5115,14 @@ class DocumentadorPBIP:
                         analisar_dax(m.expressao_dax or ""),
                     )
                     rows_med.append([m.nome, tipo_med])
-                _add_table(["Nome da Medida", "Tipo"], rows_med, compact=True)
+                _add_table(
+                    [_t("docx.tcol.measure_name"), _t("docx.tcol.measure_type")],
+                    rows_med,
+                    compact=True,
+                )
 
                 # Código de cada medida
-                h_cod = doc.add_heading("Código das Medidas", level=4)
+                h_cod = doc.add_heading(_t("docx.section.measures_code"), level=4)
                 h_cod.paragraph_format.space_before = Pt(6)
 
                 for medida in tabela.medidas:
@@ -5106,7 +5151,7 @@ class DocumentadorPBIP:
 
             # Hierarquias
             if tabela.hierarquias:
-                h = doc.add_heading("Hierarquias", level=3)
+                h = doc.add_heading(_t("docx.section.hierarchies"), level=3)
                 h.paragraph_format.space_before = Pt(8)
                 for hier in tabela.hierarquias:
                     niveis_str = " → ".join(hier.niveis)
@@ -5122,7 +5167,7 @@ class DocumentadorPBIP:
                 if not is_dax:
                     _add_regra_power_query_docx(analisar_power_query_m(codigo_formatado))
 
-                h = doc.add_heading("Fonte de Dados", level=3)
+                h = doc.add_heading(_t("docx.section.source_data"), level=3)
                 h.paragraph_format.space_before = Pt(8)
 
                 p = doc.add_paragraph()
@@ -5146,17 +5191,17 @@ class DocumentadorPBIP:
         # VISUAIS PERSONALIZADOS
         # ====================================================================
         if self.visuais_personalizados:
-            doc.add_heading("Visuais Personalizados", level=1)
+            doc.add_heading(_t("docx.section.custom_visuals"), level=1)
             rows_vis = [[v] for v in self.visuais_personalizados]
-            _add_table(["ID do Visual"], rows_vis)
+            _add_table([_t("docx.tcol.visual_id")], rows_vis)
 
         # ====================================================================
         # RECURSOS DE IMAGEM
         # ====================================================================
         if self.recursos_imagem:
-            doc.add_heading("Recursos de Imagem", level=1)
+            doc.add_heading(_t("docx.section.image_resources"), level=1)
             rows_img = [[r['nome'], r['tipo']] for r in self.recursos_imagem]
-            _add_table(["Nome", "Tipo"], rows_img)
+            _add_table([_t("docx.tcol.img_name"), _t("docx.tcol.img_type")], rows_img)
 
         # ====================================================================
         # SALVAR

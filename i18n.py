@@ -226,6 +226,116 @@ _PT_BR: Dict[str, str] = {
     # Filenames (sufixo apos o nome do projeto)
     # -------------------------------------------------------------------
     "filename.suffix": "_documentacao",
+
+    # -------------------------------------------------------------------
+    # DOCX-especificas (espelham strings do MD com pequenas variacoes)
+    # -------------------------------------------------------------------
+    "docx.toc.title": "Sumário",
+    "docx.section.overview": "Visão Geral",
+    "docx.section.dictionary": "Dicionário de Dados e Termos",
+    "docx.section.pages": "Páginas do Relatório",
+    "docx.section.page_filters": "Filtros de Página",
+    "docx.section.model": "Modelo de Dados",
+    "docx.section.relationships_list": "Lista de Relacionamentos",
+    "docx.section.query_groups": "Grupos de Consulta",
+    "docx.section.tables_summary": "Resumo das Tabelas",
+    "docx.section.tables_detail": "Detalhamento das Tabelas",
+    "docx.section.columns": "Colunas",
+    "docx.section.calc_columns": "Colunas Calculadas",
+    "docx.section.measures_dax": "Medidas DAX",
+    "docx.section.measures_code": "Código das Medidas",
+    "docx.section.hierarchies": "Hierarquias",
+    "docx.section.source_data": "Fonte de Dados",
+    "docx.section.custom_visuals": "Visuais Personalizados",
+    "docx.section.image_resources": "Recursos de Imagem",
+    "docx.section.business_rule_inferred": "Regra de Negócio Inferida",
+    "docx.section.pq_rules": "Regras de Negócio e Filtros — Power Query",
+
+    # Stats cards e info da capa
+    "docx.stat.tables": "Tabelas",
+    "docx.stat.measures": "Medidas",
+    "docx.stat.measures_dax": "Medidas DAX",
+    "docx.stat.columns": "Colunas",
+    "docx.stat.calc_columns": "Calculadas",
+    "docx.stat.relationships": "Relacionamentos",
+    "docx.stat.pages": "Páginas",
+    "docx.stat.dimensional_label": "Modelo dimensional",
+
+    # Colunas de tabelas DOCX
+    "docx.tcol.term": "Termo",
+    "docx.tcol.frequency": "Ocorrências",
+    "docx.tcol.category": "Categoria",
+    "docx.tcol.sources": "Onde aparece",
+    "docx.tcol.examples": "Exemplos",
+    "docx.tcol.idx": "#",
+    "docx.tcol.page_name": "Nome da Página",
+    "docx.tcol.page_type": "Tipo",
+    "docx.tcol.dimensions": "Dimensões",
+    "docx.tcol.filters": "Filtros",
+    "docx.tcol.table": "Tabela",
+    "docx.tcol.column": "Coluna",
+    "docx.tcol.type": "Tipo",
+    "docx.tcol.values": "Valores",
+    "docx.tcol.gq_name": "Nome",
+    "docx.tcol.gq_order": "Ordem",
+    "docx.tcol.col_name": "Nome",
+    "docx.tcol.col_type": "Tipo",
+    "docx.tcol.summarization": "Sumarização",
+    "docx.tcol.hidden": "Oculta",
+    "docx.tcol.measure_name": "Nome da Medida",
+    "docx.tcol.measure_type": "Tipo",
+    "docx.tcol.visual_id": "ID do Visual",
+    "docx.tcol.img_name": "Nome",
+    "docx.tcol.img_type": "Tipo",
+    "docx.tcol.step": "Etapa",
+    "docx.tcol.rule_or_filter": "Regra / Filtro",
+    "docx.tcol.description": "Descrição",
+    "docx.tcol.rel_from": "Origem",
+    "docx.tcol.rel_arrow": "→",
+    "docx.tcol.rel_to": "Destino",
+    "docx.tcol.rel_bidirectional": "Bidirecional",
+    "docx.tcol.rel_active": "Ativo",
+
+    # Labels reusados em valores de celulas
+    "docx.value.yes": "Sim",
+    "docx.value.no": "Não",
+    "docx.value.visible": "Visível",
+    "docx.value.hidden_label": "Oculta",
+    "docx.value.refresh_yes": "Sim",
+    "docx.value.refresh_no": "Não",
+
+    # Mensagens de info boxes
+    "docx.info.dict_intro": "Leitura offline inferida a partir dos metadados do PBIP. O dicionário não usa dados reais das tabelas e deve ser validado com a área de negócio.",
+    "docx.info.pages_count": "O relatório contém {n} página(s).",
+    "docx.info.pages_empty_thin_report": "Nenhuma página encontrada localmente. Este projeto pode ser um relatório remoto (thin report) onde as páginas ficam armazenadas no serviço Power BI.",
+    "docx.info.rel_count": "O modelo possui {n} relacionamentos entre tabelas.",
+    "docx.info.pq_intro": "Leitura offline inferida a partir das etapas do Power Query M. Para compreensão completa da regra, consulte o código M original exibido abaixo.",
+    "docx.info.pq_observations_intro": "Comentários `BI_DOC` são tratados como documentação oficial e aparecem antes da inferência automática.",
+
+    # Etapa "Esta tabela aplica" no DOCX (espelha o MD)
+    "docx.pq.summary_label": "Esta tabela aplica",
+    "docx.pq.documented_observations": "Observações Documentadas",
+
+    # Card de metadados da tabela individual (DOCX)
+    "docx.tcard.status": "Status",
+    "docx.tcard.refresh": "Atualização",
+    "docx.tcard.columns": "Colunas",
+    "docx.tcard.measures": "Medidas",
+    "docx.tcard.source": "Fonte",
+    "docx.tcard.source_import": "Importação",
+    "docx.tcard.source_dax": "DAX",
+    "docx.tcard.status_visible": "Visível",
+    "docx.tcard.status_hidden": "Oculta",
+
+    # Lista de Relacionamentos DOCX (tabela)
+    "docx.rel.col.from": "Origem",
+    "docx.rel.col.to": "Destino",
+    "docx.rel.col.from_table": "Tabela de Origem",
+    "docx.rel.col.from_column": "Coluna de Origem",
+    "docx.rel.col.to_table": "Tabela de Destino",
+    "docx.rel.col.to_column": "Coluna de Destino",
+    "docx.rel.col.bidirectional": "Bidirecional",
+    "docx.rel.col.active": "Ativo",
 }
 
 
