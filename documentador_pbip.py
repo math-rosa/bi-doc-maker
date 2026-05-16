@@ -17,6 +17,9 @@ from datetime import datetime
 from dataclasses import dataclass, field
 from typing import Optional, List, Dict, Tuple
 
+import i18n
+from i18n import t as _t
+
 
 # ============================================================================
 # DATACLASSES - Estruturas de Dados
@@ -1448,9 +1451,10 @@ _MEDIDA_TIPO_CONTAGEM_NOME_RE = re.compile(
 def inferir_tipo_medida(nome: str, dax: str, leitura: LeituraDax) -> str:
     """Heuristica conservadora para inferir o tipo de uma medida DAX.
 
-    Retorna uma das categorias: "Percentual", "Contagem", "Moeda", "Media",
-    "Soma", "Extremo", "Numerico". Designed to FAIL CLOSED — quando ambiguo,
-    cai em "Numerico" em vez de chutar errado.
+    Retorna a string traduzida (no idioma ativo) para uma das categorias:
+    Percentual / Contagem / Moeda / Media / Soma / Extremo / Numerico.
+    Designed to FAIL CLOSED -- quando ambiguo cai em "Numerico" em vez de
+    chutar errado.
     """
     nome = nome or ""
     dax = dax or ""
@@ -1460,35 +1464,35 @@ def inferir_tipo_medida(nome: str, dax: str, leitura: LeituraDax) -> str:
 
     # 1) Percentual: nome com %, palavras-chave, ou FORMAT com % no DAX
     if _MEDIDA_TIPO_PCT_NOME_RE.search(nome_norm):
-        return "Percentual"
+        return _t("measure.type.percentage")
     if re.search(r'FORMAT\s*\([^)]+?["\']\s*[#0,.\s]*%', dax):
-        return "Percentual"
+        return _t("measure.type.percentage")
 
     # 2) Contagem: funcoes de count ou nome explicito
     if "DISTINCTCOUNT" in funcoes or "COUNTROWS" in funcoes or "COUNTA" in funcoes:
-        return "Contagem"
+        return _t("measure.type.count")
     if _MEDIDA_TIPO_CONTAGEM_NOME_RE.search(nome_norm):
-        return "Contagem"
+        return _t("measure.type.count")
 
     # 3) Moeda: nome com palavras-chave fortes
     if _MEDIDA_TIPO_MOEDA_RE.search(nome_norm):
-        return "Moeda"
+        return _t("measure.type.currency")
 
     # 4) Media: AVERAGE/AVERAGEX ou nome com "media"
     if "AVERAGE" in funcoes or "AVERAGEX" in funcoes:
-        return "Media"
+        return _t("measure.type.average")
     if re.search(r"\bm[eé]dia\b|\baverage\b", nome_norm, re.I):
-        return "Media"
+        return _t("measure.type.average")
 
     # 5) Soma generica
     if "SUM" in funcoes or "SUMX" in funcoes:
-        return "Soma"
+        return _t("measure.type.sum")
 
     # 6) Min/Max sem outra qualificacao
     if "MIN" in funcoes or "MAX" in funcoes:
-        return "Extremo"
+        return _t("measure.type.minmax")
 
-    return "Numerico"
+    return _t("measure.type.numeric")
 
 
 # Mapeamento singular/plural para o sumario de etapas Power Query
@@ -1561,21 +1565,21 @@ def adicionar_regra_power_query_markdown(md: List[str], regra: RegraPowerQuery) 
             .strip()
         )
 
-    md.append("#### Regra de Negócio Inferida")
+    md.append(f"#### {_t('pq.business_rule_inferred')}")
     md.append("")
-    md.append("> Leitura offline inferida a partir das etapas do Power Query M. Para compreensão completa da regra, consulte o código M original exibido abaixo.")
+    md.append(f"> {_t('pq.intro')}")
     if regra.observacoes:
-        md.append("> Comentários `BI_DOC` são tratados como documentação oficial e aparecem antes da inferência automática.")
+        md.append(f"> {_t('pq.intro_with_observations')}")
     md.append("")
 
     if regra.observacoes:
-        md.append("**Observações Documentadas**")
+        md.append(_t("pq.documented_observations"))
         md.append("")
         rotulos = {
-            "geral": "Geral",
-            "origem": "Origem",
-            "regra": "Regra",
-            "observacao": "Observação",
+            "geral": _t("pq.obs.general"),
+            "origem": _t("pq.obs.source"),
+            "regra": _t("pq.obs.rule"),
+            "observacao": _t("pq.obs.observation"),
         }
         for chave, valores in regra.observacoes.items():
             for valor in valores:
@@ -1585,11 +1589,11 @@ def adicionar_regra_power_query_markdown(md: List[str], regra: RegraPowerQuery) 
     if regra.linhas_regra:
         resumo = _resumir_etapas_power_query(regra.linhas_regra)
         if resumo:
-            md.append(f"**Esta tabela aplica**: {resumo}.")
+            md.append(f"{_t('pq.summary_label')}: {resumo}.")
             md.append("")
-        md.append("**Regras de Negócio e Filtros — Power Query**")
+        md.append(_t("pq.rules_title"))
         md.append("")
-        md.append("| Etapa | Regra / Filtro | Descrição |")
+        md.append(f"| {_t('pq.col.step')} | {_t('pq.col.rule_or_filter')} | {_t('pq.col.description')} |")
         md.append("|---|---|---|")
         linhas_agrupadas = _agrupar_linhas_regra_consecutivas(regra.linhas_regra)
         for linha in linhas_agrupadas:
@@ -1614,7 +1618,7 @@ def adicionar_linhagem_dax_markdown(
     medidas_refs = [r for r in leitura.referencias_medidas if r in medidas_conhecidas]
     if medidas_refs:
         nomes = ", ".join(f"`[{m}]`" for m in medidas_refs)
-        md.append(f"**Medidas referenciadas**: {nomes}")
+        md.append(f"{_t('linhagem.measures_referenced')}: {nomes}")
         md.append("")
 
 
@@ -1627,7 +1631,7 @@ def adicionar_leitura_dax_markdown(md: List[str], leitura: LeituraDax) -> None:
     """
     if not leitura.funcoes:
         return
-    md.append("**Funções DAX usadas**")
+    md.append(_t("leitura_dax.functions_used"))
     md.append("")
     if leitura.categorias:
         # Para cada categoria, lista as funcoes (sem descricao - vai no glossario).
@@ -3016,15 +3020,14 @@ class DocumentadorPBIP:
         if not por_categoria:
             return
 
-        md.append("## 📐 Glossário DAX")
+        md.append(f"## {_t('doc.section.glossary_dax')}")
+        md.append("")
+        md.append(f"> {_t('glossary_dax.intro')}")
         md.append("")
         md.append(
-            "> Funções DAX usadas em medidas, colunas calculadas e tabelas "
-            "deste projeto. Cada medida individual abaixo lista apenas os "
-            "nomes das funções — a descrição completa fica aqui."
+            f"| {_t('glossary_dax.col.function')} | {_t('glossary_dax.col.category')} | "
+            f"{_t('glossary_dax.col.description')} | {_t('glossary_dax.col.business_reading')} |"
         )
-        md.append("")
-        md.append("| Função | Categoria | Descrição | Leitura de negócio |")
         md.append("|---|---|---|---|")
         for categoria in DAX_CATEGORY_ORDER:
             entradas = por_categoria.get(categoria, [])
@@ -3343,24 +3346,24 @@ class DocumentadorPBIP:
         Retorna string vazia quando nao detecta convencao fat_/dim_ (modelo nao
         e star schema explicito; sumario seria enganoso).
         """
-        fatos = sum(1 for t in self.tabelas if self._classificar_tabela(t.nome) == "fato")
-        dims = sum(1 for t in self.tabelas if self._classificar_tabela(t.nome) == "dimensao")
+        fatos = sum(1 for tab in self.tabelas if self._classificar_tabela(tab.nome) == "fato")
+        dims = sum(1 for tab in self.tabelas if self._classificar_tabela(tab.nome) == "dimensao")
         outras = len(self.tabelas) - fatos - dims
 
         if fatos == 0 and dims == 0:
             return ""
 
-        def plural(n: int, singular: str, plural_: str) -> str:
-            return f"**{n}** {plural_ if n != 1 else singular}"
+        def plural(n: int, key_one: str, key_many: str) -> str:
+            return f"**{n}** {_t(key_many) if n != 1 else _t(key_one)}"
 
         partes: List[str] = []
         if fatos:
-            partes.append(plural(fatos, "fato", "fatos"))
+            partes.append(plural(fatos, "overview.dim.fact_one", "overview.dim.fact_many"))
         if dims:
-            partes.append(plural(dims, "dimensão", "dimensões"))
+            partes.append(plural(dims, "overview.dim.dim_one", "overview.dim.dim_many"))
         texto = " × ".join(partes)
         if outras:
-            texto += f" + {plural(outras, 'auxiliar', 'auxiliares')}"
+            texto += f" + {plural(outras, 'overview.dim.aux_one', 'overview.dim.aux_many')}"
         return texto
 
     def gerar_documentacao(self) -> str:
@@ -3420,7 +3423,7 @@ class DocumentadorPBIP:
             f'border-bottom: 3px solid {cor_secundaria};">{titulo_doc}</h1>'
         )
         md.append(f'<p class="cover-project" style="color: {cor_primaria};">{nome_projeto_html}</p>')
-        md.append(f'<p class="cover-date">Data de Criação: {data_criacao}</p>')
+        md.append(f'<p class="cover-date">{_t("cover.created_on")}: {data_criacao}</p>')
         md.append('</div>')
         md.append('')
         md.append('<div class="page-break"></div>')
@@ -3429,7 +3432,7 @@ class DocumentadorPBIP:
         # ========================================================================
         # ÍNDICE (Página 2)
         # ========================================================================
-        md.append(f"## 📑 Índice")
+        md.append(f"## {_t('doc.toc.title')}")
         md.append(f"")
         import unicodedata
         import re
@@ -3439,16 +3442,23 @@ class DocumentadorPBIP:
             texto = re.sub(r'[^\w\s-]', '', texto).strip().lower()
             return re.sub(r'[-\s]+', '-', texto)
 
-        # Indice completo em HTML para controle total da numeracao
+        # Indice completo em HTML para controle total da numeracao.
+        # Gera slugs dinamicamente a partir do label traduzido \u2014 funciona em
+        # qualquer idioma sem catalogo separado de anchors.
+        def _toc_li(key: str) -> str:
+            label = _t(key)
+            return f'<li><a href="#{gerar_slug(label)}">{label}</a></li>'
+
         toc_items = []
         toc_items.append('<ol class="toc-list">')
-        toc_items.append('<li><a href="#visao-geral">Vis\u00e3o Geral</a></li>')
+        toc_items.append(_toc_li("doc.toc.overview"))
         if dicionario_dados:
-            toc_items.append('<li><a href="#dicionario-de-dados-e-termos">Dicion\u00e1rio de Dados e Termos</a></li>')
-        toc_items.append('<li><a href="#paginas-do-relatorio">P\u00e1ginas do Relat\u00f3rio</a></li>')
-        toc_items.append('<li><a href="#modelo-de-dados">Modelo de Dados</a></li>')
-        toc_items.append('<li><a href="#resumo-das-tabelas">Resumo das Tabelas</a></li>')
-        toc_items.append('<li><a href="#detalhamento-das-tabelas">Detalhamento das Tabelas</a>')
+            toc_items.append(_toc_li("doc.toc.dictionary"))
+        toc_items.append(_toc_li("doc.toc.pages"))
+        toc_items.append(_toc_li("doc.toc.model"))
+        toc_items.append(_toc_li("doc.toc.tables_summary"))
+        det_label = _t("doc.toc.tables_detail")
+        toc_items.append(f'<li><a href="#{gerar_slug(det_label)}">{det_label}</a>')
         toc_items.append('<div style="margin-left: 1em; margin-top: 0.3em;">')
         for idx, tabela in enumerate(self.tabelas, 1):
             slug = gerar_slug(f"{idx}. {tabela.nome}")
@@ -3456,10 +3466,10 @@ class DocumentadorPBIP:
             toc_items.append(f'{letra}) <a href="#{slug}">{tabela.nome}</a><br/>')
         toc_items.append('</div>')
         toc_items.append('</li>')
-        toc_items.append('<li><a href="#relacionamentos">Relacionamentos</a></li>')
+        toc_items.append(_toc_li("doc.toc.relationships"))
         if self.visuais_personalizados:
-            toc_items.append('<li><a href="#visuais-personalizados">Visuais Personalizados</a></li>')
-        toc_items.append('<li><a href="#recursos-de-imagem">Recursos de Imagem</a></li>')
+            toc_items.append(_toc_li("doc.toc.custom_visuals"))
+        toc_items.append(_toc_li("doc.toc.image_resources"))
         toc_items.append('</ol>')
         md.append('\n'.join(toc_items))
         md.append(f"")
@@ -3471,15 +3481,19 @@ class DocumentadorPBIP:
         # VISÃO GERAL (Página 3+)
         # ========================================================================
         rel_validos_visao = self._relacionamentos_usuario()
-        md.append(f"## 📈 Visão Geral")
+        md.append(f"## {_t('doc.section.overview')}")
         md.append(f"")
-        md.append(f"| 📁 Tabelas | 📐 Medidas | 🔢 Colunas | 🧮 Calculadas | 🔗 Relacionamentos | 📄 Páginas |")
+        md.append(
+            f"| {_t('overview.col.tables')} | {_t('overview.col.measures')} | "
+            f"{_t('overview.col.columns')} | {_t('overview.col.calc_columns')} | "
+            f"{_t('overview.col.relationships')} | {_t('overview.col.pages')} |"
+        )
         md.append(f"|:----------:|:----------:|:----------:|:-------------:|:-----------------:|:----------:|")
         md.append(f"| **{len(self.tabelas)}** | **{total_medidas}** | **{total_colunas}** | **{total_calc}** | **{len(rel_validos_visao)}** | **{len(self.paginas)}** |")
         md.append(f"")
         resumo_dim = self._resumo_modelo_dimensional()
         if resumo_dim:
-            md.append(f"**Modelo dimensional**: {resumo_dim}.")
+            md.append(f"{_t('overview.dimensional_label')}: {resumo_dim}.")
             md.append(f"")
         md.append(f"---")
         md.append(f"")
@@ -3488,14 +3502,14 @@ class DocumentadorPBIP:
         # PÁGINAS DO RELATÓRIO
         # ========================================================================
         if dicionario_dados:
-            md.append("## Dicionário de Dados e Termos")
+            md.append(f"## {_t('doc.section.dictionary')}")
+            md.append("")
+            md.append(f"> {_t('dict.intro')}")
             md.append("")
             md.append(
-                "> Leitura offline inferida a partir dos metadados do PBIP. "
-                "O dicionário não usa dados reais das tabelas e deve ser validado com a área de negócio."
+                f"| {_t('dict.col.term')} | {_t('dict.col.frequency')} | "
+                f"{_t('dict.col.category')} | {_t('dict.col.sources')} | {_t('dict.col.examples')} |"
             )
-            md.append("")
-            md.append("| Termo | Ocorrências | Categoria | Onde aparece | Exemplos |")
             md.append("|---|---:|---|---|---|")
             for termo in dicionario_dados:
                 onde_aparece = ", ".join(termo.fontes[:5]) or "-"
@@ -3514,9 +3528,9 @@ class DocumentadorPBIP:
         # Glossario DAX consolidado (uma vez para todo o documento).
         self._gerar_glossario_dax_markdown(md)
 
-        md.append(f"## 📄 Páginas do Relatório")
+        md.append(f"## {_t('doc.section.pages')}")
         md.append(f"")
-        md.append(f"**Total de páginas: {len(self.paginas)}**")
+        md.append(_t("pages.total", n=len(self.paginas)))
         md.append(f"")
         if self.paginas:
             md.append(f"| # | Nome | Tipo | Dimensões | Filtros |")
@@ -3554,7 +3568,7 @@ class DocumentadorPBIP:
 
                     md.append(f"")
         else:
-            md.append(f"> ⚠️ Nenhuma página encontrada localmente. Este projeto pode ser um **relatório remoto** (thin report) onde as páginas ficam armazenadas no serviço Power BI.")
+            md.append(f"> {_t('pages.empty_thin_report')}")
             md.append(f"")
 
         md.append(f"---")
@@ -3563,20 +3577,20 @@ class DocumentadorPBIP:
         # ========================================================================
         # MODELO DE DADOS
         # ========================================================================
-        md.append(f"## 🗂️ Modelo de Dados")
+        md.append(f"## {_t('doc.section.model')}")
         md.append(f"")
 
 
         # Diagrama de Relacionamentos (Mermaid)
         if self.tabelas or self.relacionamentos:
-            md.append(f"### Diagrama de Relacionamentos (ER)")
+            md.append(f"### {_t('doc.section.er_diagram')}")
             md.append(f"")
             md.append(f"```mermaid")
             md.append(self._gerar_codigo_mermaid())
 
             md.append("```")
             md.append("")
-            md.append("*Legenda: `}|--||` = Filtro Bidirecional | `}o--||` = Filtro Único*")
+            md.append(_t("rel.legend"))
             md.append("")
         # Relacionamentos (Tabela)
         if self.relacionamentos:
@@ -3584,25 +3598,28 @@ class DocumentadorPBIP:
 
             if rel_validos:
                 md.append(f"")
-                md.append(f"### 🔗 Lista de Relacionamentos")
+                md.append(f"### {_t('doc.section.relationships_list')}")
                 md.append(f"")
-                md.append(f"*Total: {len(rel_validos)} relacionamentos*")
+                md.append(_t("rel.total_label", n=len(rel_validos)))
                 md.append(f"")
-                md.append(f"| Origem | → | Destino | Bidirecional | Ativo |")
+                md.append(
+                    f"| {_t('rel.col.from')} | {_t('rel.col.arrow')} | {_t('rel.col.to')} | "
+                    f"{_t('rel.col.bidirectional')} | {_t('rel.col.active')} |"
+                )
                 md.append(f"|--------|---|---------|--------------|-------|")
 
                 for rel in rel_validos:
                     origem = f"{rel.tabela_origem}.{rel.coluna_origem}"
                     destino = f"{rel.tabela_destino}.{rel.coluna_destino}"
-                    bidirecional = "Sim" if rel.filtro_bidirecional else "Não"
-                    ativo = "Sim" if rel.esta_ativo else "Não"
-                    md.append(f"| {origem} | → | {destino} | {bidirecional} | {ativo} |")
+                    bidirecional = _t("table.yes") if rel.filtro_bidirecional else _t("table.no")
+                    ativo = _t("table.yes") if rel.esta_ativo else _t("table.no")
+                    md.append(f"| {origem} | {_t('rel.col.arrow')} | {destino} | {bidirecional} | {ativo} |")
 
                 md.append(f"")
 
         # Grupos de Consulta
         if self.info_modelo.grupos_consulta:
-            md.append(f"### 📂 Grupos de Consulta")
+            md.append(f"### {_t('doc.section.query_groups')}")
             md.append(f"")
             md.append(f"| Nome | Ordem |")
             md.append(f"|------|-------|")
@@ -3620,11 +3637,15 @@ class DocumentadorPBIP:
         # ========================================================================
         md.append(f"---")
         md.append(f"")
-        md.append(f"## 📊 Resumo das Tabelas")
+        md.append(f"## {_t('doc.section.tables_summary')}")
         md.append(f"")
-        md.append(f"*Visão geral de {len(self.tabelas)} tabelas no modelo*")
+        md.append(_t("tables_summary.intro", n=len(self.tabelas)))
         md.append(f"")
-        md.append(f"| # | Tabela | Colunas | Medidas | Colunas Calc. | Fonte |")
+        md.append(
+            f"| {_t('tables_summary.col.idx')} | {_t('tables_summary.col.table')} | "
+            f"{_t('tables_summary.col.columns')} | {_t('tables_summary.col.measures')} | "
+            f"{_t('tables_summary.col.calc_columns')} | {_t('tables_summary.col.source')} |"
+        )
         md.append(f"|---|--------|---------|---------|---------------|-------|")
 
         for idx, tabela in enumerate(self.tabelas, 1):
@@ -3639,26 +3660,26 @@ class DocumentadorPBIP:
         md.append(f"")
 
         # Totais
-        total_colunas = sum(len(t.colunas) for t in self.tabelas)
-        total_medidas = sum(len(t.medidas) for t in self.tabelas)
-        total_calc = sum(len(t.colunas_calculadas) for t in self.tabelas)
-        md.append(f"**Totais**: {total_colunas} colunas | {total_medidas} medidas | {total_calc} colunas calculadas")
+        total_colunas = sum(len(tab.colunas) for tab in self.tabelas)
+        total_medidas = sum(len(tab.medidas) for tab in self.tabelas)
+        total_calc = sum(len(tab.colunas_calculadas) for tab in self.tabelas)
+        md.append(_t("tables_summary.totals", cols=total_colunas, meds=total_medidas, calc=total_calc))
         md.append(f"")
 
         # Tabelas
         if self.tabelas:
             md.append(f"---")
             md.append(f"")
-            md.append(f"## 📁 Tabelas do Modelo")
+            md.append(f"## {_t('doc.section.tables_in_model')}")
             md.append(f"")
-            md.append(f"*Total de tabelas documentadas: {len(self.tabelas)}*")
+            md.append(_t("tables_summary.doc_count", n=len(self.tabelas)))
             md.append(f"")
         else:
             md.append(f"---")
             md.append(f"")
-            md.append(f"## Tabelas")
+            md.append(f"## {_t('doc.section.tables')}")
             md.append(f"")
-            md.append(f"*Nenhuma tabela encontrada no projeto.*")
+            md.append(_t("tables_summary.empty"))
             md.append(f"")
 
         for idx, tabela in enumerate(self.tabelas, 1):
@@ -3675,29 +3696,35 @@ class DocumentadorPBIP:
                 md.append(f"")
 
             # Card de metadados com badges
-            status_badge = "🔴 Oculta" if tabela.esta_oculta else "🟢 Visível"
-            refresh_badge = "❌ Não" if tabela.excluida_refresh else "✅ Sim"
+            status_badge = _t("table.status.hidden") if tabela.esta_oculta else _t("table.status.visible")
+            refresh_badge = _t("table.refresh.no") if tabela.excluida_refresh else _t("table.refresh.yes")
 
             # Determina tipo de fonte
-            fonte_tipo = "📥 Importação"
+            fonte_tipo = _t("table.source.import")
             if tabela.particao:
                 if tabela.particao.grupo_consulta:
                     fonte_tipo = f"🗃️ {tabela.particao.grupo_consulta}"
                 elif _codigo_fonte_eh_dax(tabela.particao.codigo_fonte) if tabela.particao.codigo_fonte else False:
-                    fonte_tipo = "📝 DAX"
+                    fonte_tipo = _t("table.source.dax")
                 elif "Oracle" in tabela.particao.codigo_fonte if tabela.particao.codigo_fonte else False:
-                    fonte_tipo = "🔷 Oracle"
+                    fonte_tipo = _t("table.source.oracle")
 
-            md.append(f"| Status | Atualização | Colunas | Medidas | Fonte |")
+            md.append(
+                f"| {_t('table.col.status')} | {_t('table.col.refresh')} | "
+                f"{_t('table.col.columns')} | {_t('table.col.measures')} | {_t('table.col.source')} |"
+            )
             md.append(f"|:------:|:-----------:|:-------:|:-------:|:-----:|")
             md.append(f"| {status_badge} | {refresh_badge} | {len(tabela.colunas)} | {len(tabela.medidas)} | {fonte_tipo} |")
             md.append(f"")
 
             # Colunas
             if tabela.colunas:
-                md.append(f"#### 📋 Colunas")
+                md.append(f"#### {_t('table.section.columns')}")
                 md.append(f"")
-                md.append(f"| Nome | Tipo | Sumarização | Oculta |")
+                md.append(
+                    f"| {_t('table.col.name')} | {_t('table.col.type')} | "
+                    f"{_t('table.col.summarization')} | {_t('table.col.hidden')} |"
+                )
                 md.append(f"|:-----|:----:|:-----------:|:------:|")
 
                 for coluna in tabela.colunas:
@@ -3708,9 +3735,11 @@ class DocumentadorPBIP:
 
             # Colunas Calculadas - Resumo
             if tabela.colunas_calculadas:
-                md.append(f"#### Colunas Calculadas (Resumo)")
+                md.append(f"#### {_t('table.section.calc_columns_summary')}")
                 md.append(f"")
-                md.append(f"| Nome | Tipo | Formato |")
+                md.append(
+                    f"| {_t('table.calc.col.name')} | {_t('table.calc.col.type')} | {_t('table.calc.col.format')} |"
+                )
                 md.append(f"|------|------|---------|")
 
                 for coluna in tabela.colunas_calculadas:
@@ -3721,7 +3750,7 @@ class DocumentadorPBIP:
                 md.append(f"")
 
                 # Colunas Calculadas - Código DAX Completo
-                md.append(f"#### Colunas Calculadas - Código DAX")
+                md.append(f"#### {_t('table.section.calc_columns_dax')}")
                 md.append(f"")
 
                 for coluna in tabela.colunas_calculadas:
@@ -3755,9 +3784,9 @@ class DocumentadorPBIP:
 
             # Medidas - Resumo
             if tabela.medidas:
-                md.append(f"#### Medidas (Resumo)")
+                md.append(f"#### {_t('table.section.measures_summary')}")
                 md.append(f"")
-                md.append(f"| Nome | Tipo |")
+                md.append(f"| {_t('table.measure.col.name')} | {_t('table.measure.col.type')} |")
                 md.append(f"|------|------|")
 
                 for medida in tabela.medidas:
@@ -3771,7 +3800,7 @@ class DocumentadorPBIP:
                 md.append(f"")
 
                 # Medidas - Código DAX Completo
-                md.append(f"#### Medidas - Código DAX")
+                md.append(f"#### {_t('table.section.measures_dax')}")
                 md.append(f"")
 
                 for medida in tabela.medidas:
@@ -3827,7 +3856,7 @@ class DocumentadorPBIP:
 
             # Fonte de Dados
             if tabela.particao and tabela.particao.codigo_fonte:
-                md.append(f"#### 💾 Fonte de Dados")
+                md.append(f"#### {_t('table.section.source_data')}")
                 md.append(f"")
 
                 # Badges para modo e grupo
@@ -3835,17 +3864,17 @@ class DocumentadorPBIP:
                 grupo_badge = f"`{tabela.particao.grupo_consulta}`" if tabela.particao.grupo_consulta else ""
 
                 if grupo_badge:
-                    md.append(f"**Modo**: {modo_badge} | **Grupo**: {grupo_badge}")
+                    md.append(f"{_t('table.source.mode_label')}: {modo_badge} | {_t('table.source.group_label')}: {grupo_badge}")
                 else:
-                    md.append(f"**Modo**: {modo_badge}")
+                    md.append(f"{_t('table.source.mode_label')}: {modo_badge}")
                 md.append(f"")
 
                 # Código fonte formatado
                 codigo_formatado = self._formatar_codigo_fonte(tabela.particao.codigo_fonte)
                 is_dax = _codigo_fonte_eh_dax(tabela.particao.codigo_fonte)
                 lang_fonte = "dax" if is_dax else "powerquery"
-                label_fonte = "DAX" if is_dax else "Power Query M"
-                md.append(f"**Código fonte ({label_fonte})**")
+                src_label = _t("table.source.code_dax") if is_dax else _t("table.source.code_m")
+                md.append(src_label)
                 md.append(f"")
                 md.append(f"```{lang_fonte}")
                 md.append(codigo_formatado)
@@ -3858,7 +3887,7 @@ class DocumentadorPBIP:
         if self.visuais_personalizados:
             md.append(f"---")
             md.append(f"")
-            md.append(f"## Visuais Personalizados")
+            md.append(f"## {_t('doc.toc.custom_visuals')}")
             md.append(f"")
             md.append(f"| ID do Visual |")
             md.append(f"|--------------|")
@@ -3872,7 +3901,7 @@ class DocumentadorPBIP:
         if self.recursos_imagem:
             md.append(f"---")
             md.append(f"")
-            md.append(f"## Recursos de Imagem")
+            md.append(f"## {_t('doc.toc.image_resources')}")
             md.append(f"")
             md.append(f"| Nome | Tipo |")
             md.append(f"|------|------|")
