@@ -498,25 +498,41 @@ TERM_TECHNICAL_WORDS = {
     "sk", "fk", "pk", "local", "etapa", "emp",
 }
 
-TERM_IDENTIFIER_WORDS = {"id", "ids", "codigo", "codigos", "chave", "key", "keys", "guid"}
+TERM_IDENTIFIER_WORDS = {"id", "ids", "codigo", "codigos", "code", "codes", "chave", "key", "keys", "guid"}
 
 TERM_TIME_WORDS = {
-    "data", "date", "ano", "year", "mes", "mês", "month", "dia", "day", "semana",
-    "week", "periodo", "período", "period", "trimestre", "quarter", "competencia",
-    "competência", "calendario", "calendário", "ytd", "mtd",
+    # PT
+    "data", "ano", "mes", "mês", "dia", "semana", "periodo", "período",
+    "trimestre", "competencia", "competência", "calendario", "calendário",
+    # EN
+    "date", "year", "month", "day", "week", "period", "quarter", "calendar",
+    "hour", "today", "yesterday", "tomorrow",
+    # Universal abbreviations
+    "ytd", "mtd", "qtd", "ftd",
 }
 
 TERM_INDICATOR_WORDS = {
+    # PT
     "receita", "despesa", "valor", "total", "saldo", "soma", "media", "média",
     "quantidade", "qtd", "percentual", "perc", "taxa", "indice", "índice",
     "meta", "previsto", "realizado", "orcamento", "orçamento", "custo", "margem",
     "lucro", "resultado", "venda", "vendas", "faturamento", "empenho", "empenhos",
+    # EN
+    "value", "revenue", "expense", "sales", "sale", "amount", "balance", "sum",
+    "average", "avg", "count", "percent", "percentage", "rate", "ratio", "share",
+    "index", "target", "planned", "actual", "budget", "cost", "margin", "profit",
+    "income", "invoice", "expenditure", "paid", "payment", "credit", "debit",
+    "price", "qty", "quantity", "fee", "spend",
 }
 
 TERM_ATTRIBUTE_WORDS = {
+    # PT
     "status", "tipo", "categoria", "grupo", "classe", "segmento", "regiao", "região",
     "gerencia", "gerência", "diretoria", "departamento", "area", "área", "nome",
     "descricao", "descrição", "atributo", "natureza", "programa", "projeto", "processo",
+    # EN
+    "type", "category", "group", "class", "segment", "region", "name",
+    "description", "attribute", "project", "process", "department",
 }
 
 
@@ -1447,6 +1463,24 @@ _MEDIDA_TIPO_CONTAGEM_NOME_RE = re.compile(
     re.I,
 )
 
+# Equivalentes EN -- aplicados quando locale = en_US (alem dos PT, ja que nomes
+# de medidas EN aparecem mesmo em modelos PT-BR ocasionalmente).
+_MEDIDA_TIPO_MOEDA_EN_RE = re.compile(
+    # NB: NAO incluir "total" -- termo generico demais (total de qualquer coisa).
+    r"\b(value|revenue|cost|sales|sale|amount|price|expense|spend|budget|"
+    r"paid|payment|debit|credit|invoice|balance|principal|salary|wage|fee|"
+    r"income|expenditure|cash|asset|liabilit|equity|gross|net)",
+    re.I,
+)
+_MEDIDA_TIPO_PCT_EN_RE = re.compile(
+    r"(^\s*%|\bpct\b|\bpercent(?:age)?\b|\bindex\b|\brate\b|\bratio\b|\bshare\b)",
+    re.I,
+)
+_MEDIDA_TIPO_CONTAGEM_EN_RE = re.compile(
+    r"\b(qty|quantity|count|number|num\b|num_|total[_ ]?records?|of[_ ]?records?)",
+    re.I,
+)
+
 
 def inferir_tipo_medida(nome: str, dax: str, leitura: LeituraDax) -> str:
     """Heuristica conservadora para inferir o tipo de uma medida DAX.
@@ -1454,7 +1488,8 @@ def inferir_tipo_medida(nome: str, dax: str, leitura: LeituraDax) -> str:
     Retorna a string traduzida (no idioma ativo) para uma das categorias:
     Percentual / Contagem / Moeda / Media / Soma / Extremo / Numerico.
     Designed to FAIL CLOSED -- quando ambiguo cai em "Numerico" em vez de
-    chutar errado.
+    chutar errado. Aplica regex PT e EN simultaneamente porque medidas
+    podem ter nome em qualquer idioma independente do locale.
     """
     nome = nome or ""
     dax = dax or ""
@@ -1462,26 +1497,26 @@ def inferir_tipo_medida(nome: str, dax: str, leitura: LeituraDax) -> str:
     nome_norm = nome.replace("_", " ")
     funcoes = {f.upper() for f in (leitura.funcoes or [])}
 
-    # 1) Percentual: nome com %, palavras-chave, ou FORMAT com % no DAX
-    if _MEDIDA_TIPO_PCT_NOME_RE.search(nome_norm):
+    # 1) Percentual: nome com %, palavras-chave (PT ou EN), ou FORMAT com % no DAX
+    if _MEDIDA_TIPO_PCT_NOME_RE.search(nome_norm) or _MEDIDA_TIPO_PCT_EN_RE.search(nome_norm):
         return _t("measure.type.percentage")
     if re.search(r'FORMAT\s*\([^)]+?["\']\s*[#0,.\s]*%', dax):
         return _t("measure.type.percentage")
 
-    # 2) Contagem: funcoes de count ou nome explicito
+    # 2) Contagem: funcoes de count ou nome explicito (PT ou EN)
     if "DISTINCTCOUNT" in funcoes or "COUNTROWS" in funcoes or "COUNTA" in funcoes:
         return _t("measure.type.count")
-    if _MEDIDA_TIPO_CONTAGEM_NOME_RE.search(nome_norm):
+    if _MEDIDA_TIPO_CONTAGEM_NOME_RE.search(nome_norm) or _MEDIDA_TIPO_CONTAGEM_EN_RE.search(nome_norm):
         return _t("measure.type.count")
 
-    # 3) Moeda: nome com palavras-chave fortes
-    if _MEDIDA_TIPO_MOEDA_RE.search(nome_norm):
+    # 3) Moeda: nome com palavras-chave fortes (PT ou EN)
+    if _MEDIDA_TIPO_MOEDA_RE.search(nome_norm) or _MEDIDA_TIPO_MOEDA_EN_RE.search(nome_norm):
         return _t("measure.type.currency")
 
-    # 4) Media: AVERAGE/AVERAGEX ou nome com "media"
+    # 4) Media: AVERAGE/AVERAGEX ou nome com "media" / "average"
     if "AVERAGE" in funcoes or "AVERAGEX" in funcoes:
         return _t("measure.type.average")
-    if re.search(r"\bm[eé]dia\b|\baverage\b", nome_norm, re.I):
+    if re.search(r"\bm[eé]dia\b|\baverage\b|\bavg\b|\bmean\b", nome_norm, re.I):
         return _t("measure.type.average")
 
     # 5) Soma generica
@@ -1522,6 +1557,55 @@ _POWER_QUERY_ETAPA_PLURAIS = {
     "Transformação Personalizada": ("transformação personalizada", "transformações personalizadas"),
 }
 
+# Espelho EN -- valores nos analisadores ficam em PT, mas na renderizacao
+# (sumario + coluna Etapa) traduzimos via lookup quando locale = en_US.
+_POWER_QUERY_ETAPA_EN = {
+    # PT name -> (EN label, EN singular, EN plural)
+    "Fonte":                       ("Source",            "source",            "sources"),
+    "Tipagem":                     ("Type cast",         "type cast",         "type casts"),
+    "Filtro":                      ("Filter",            "filter",            "filters"),
+    "Renomeação":                  ("Rename",            "rename",            "renames"),
+    "Seleção de Colunas":          ("Select Columns",    "column selection",  "column selections"),
+    "Remoção de Colunas":          ("Remove Columns",    "column removal",    "column removals"),
+    "Coluna Calculada":            ("Calculated Column", "calculated column", "calculated columns"),
+    "Coluna Condicional":          ("Conditional Column","conditional column","conditional columns"),
+    "Merge / Junção":              ("Merge / Join",      "join",              "joins"),
+    "Append":                      ("Append",            "append",            "appends"),
+    "Expansão":                    ("Expand",            "expand",            "expands"),
+    "Agrupamento":                 ("Group By",          "group by",          "group bys"),
+    "Pivot":                       ("Pivot",             "pivot",             "pivots"),
+    "Unpivot":                     ("Unpivot",           "unpivot",           "unpivots"),
+    "Ordenação":                   ("Sort",              "sort",              "sorts"),
+    "Deduplicação":                ("Deduplicate",       "deduplication",     "deduplications"),
+    "Substituição de Valores":     ("Replace Values",    "value replacement", "value replacements"),
+    "Cabeçalhos":                  ("Headers",           "header adjustment", "header adjustments"),
+    "Tratamento de Erros":         ("Error Handling",    "error handling",    "error handlings"),
+    "Tratamento de Erro":          ("Error Handling",    "error handling",    "error handlings"),
+    "Recorte de Linhas":           ("Row Slice",         "row slice",         "row slices"),
+    "Regra Condicional":           ("Conditional Rule",  "conditional rule",  "conditional rules"),
+    "Transformação Personalizada": ("Custom Transform",  "custom transform",  "custom transforms"),
+}
+
+
+def _localize_etapa_pq(etapa_pt: str) -> str:
+    """Traduz o nome da etapa PT para o locale ativo. Fallback: o proprio PT."""
+    if i18n.get_locale() == "en_US":
+        entry = _POWER_QUERY_ETAPA_EN.get(etapa_pt)
+        if entry:
+            return entry[0]
+    return etapa_pt
+
+
+def _plurais_etapa_pq(etapa_pt: str) -> Tuple[str, str]:
+    """Retorna (singular, plural) para a etapa no locale ativo."""
+    if i18n.get_locale() == "en_US":
+        entry = _POWER_QUERY_ETAPA_EN.get(etapa_pt)
+        if entry:
+            return (entry[1], entry[2])
+    return _POWER_QUERY_ETAPA_PLURAIS.get(
+        etapa_pt, (etapa_pt.lower(), etapa_pt.lower())
+    )
+
 
 def _resumir_etapas_power_query(linhas: List["LinhaRegraPowerQuery"]) -> str:
     """Conta etapas por categoria e retorna texto resumido para cabecalho.
@@ -1544,9 +1628,7 @@ def _resumir_etapas_power_query(linhas: List["LinhaRegraPowerQuery"]) -> str:
     partes: List[str] = []
     for etapa in ordem:
         count = contagem[etapa]
-        singular, plural = _POWER_QUERY_ETAPA_PLURAIS.get(
-            etapa, (etapa.lower(), etapa.lower())
-        )
+        singular, plural = _plurais_etapa_pq(etapa)
         nome = plural if count > 1 else singular
         partes.append(f"{count} {nome}")
     return ", ".join(partes)
@@ -1598,7 +1680,7 @@ def adicionar_regra_power_query_markdown(md: List[str], regra: RegraPowerQuery) 
         linhas_agrupadas = _agrupar_linhas_regra_consecutivas(regra.linhas_regra)
         for linha in linhas_agrupadas:
             md.append(
-                f"| {escape_table(linha.etapa)} "
+                f"| {escape_table(_localize_etapa_pq(linha.etapa))} "
                 f"| {escape_table(linha.regra)} "
                 f"| {escape_table(linha.descricao)} |"
             )
@@ -1648,7 +1730,10 @@ def adicionar_leitura_dax_markdown(md: List[str], leitura: LeituraDax) -> None:
                     nome = nome.replace("`", "")
                     nomes_funcao.append(f"`{nome}`")
             if nomes_funcao:
-                label = DAX_CATEGORY_LABELS.get(categoria, categoria.title())
+                label = i18n.t_or(
+                    f"dax.cat.{categoria}",
+                    DAX_CATEGORY_LABELS.get(categoria, categoria.title()),
+                )
                 md.append(f"- **{label}**: {', '.join(nomes_funcao)}")
     else:
         # Fallback: lista funcoes diretamente
@@ -2771,6 +2856,27 @@ class DocumentadorPBIP:
 
         return resultado
 
+    # Mapa de categorias internas (chave i18n) para PT canonico (usado tambem
+    # como fallback de exibicao quando locale = pt-BR).
+    _DICT_CAT_KEYS = {
+        "Tempo":         "dict.cat.time",
+        "Identificador": "dict.cat.identifier",
+        "Indicador":     "dict.cat.indicator",
+        "Filtro":        "dict.cat.filter",
+        "Página/Visual": "dict.cat.page_visual",
+        "Regra Técnica": "dict.cat.technical_rule",
+        "Entidade":      "dict.cat.entity",
+        "Atributo":      "dict.cat.attribute",
+        "Termo Geral":   "dict.cat.general",
+    }
+
+    def _localizar_categoria_termo(self, categoria_pt: str) -> str:
+        """Traduz categoria do dicionario para o locale ativo. Fallback: PT."""
+        key = self._DICT_CAT_KEYS.get(categoria_pt)
+        if not key:
+            return categoria_pt
+        return i18n.t_or(key, categoria_pt)
+
     def _categoria_termo_dicionario(self, chave: str, fontes: List[str]) -> str:
         palavras = set(str(chave or "").split())
         fontes_set = set(fontes or [])
@@ -3020,6 +3126,21 @@ class DocumentadorPBIP:
         if not por_categoria:
             return
 
+        def _dax_cat_label(categoria: str) -> str:
+            # i18n override (en) com fallback ao DAX_CATEGORY_LABELS (pt)
+            return i18n.t_or(
+                f"dax.cat.{categoria}",
+                DAX_CATEGORY_LABELS.get(categoria, categoria.title()),
+            )
+
+        def _dax_desc(entrada: "CatalogoFuncao") -> str:
+            key_root = f"dax.{entrada.nome.lower()}"
+            return i18n.t_or(f"{key_root}.desc", entrada.descricao)
+
+        def _dax_business(entrada: "CatalogoFuncao") -> str:
+            key_root = f"dax.{entrada.nome.lower()}"
+            return i18n.t_or(f"{key_root}.business", entrada.leitura_negocio)
+
         md.append(f"## {_t('doc.section.glossary_dax')}")
         md.append("")
         md.append(f"> {_t('glossary_dax.intro')}")
@@ -3033,25 +3154,25 @@ class DocumentadorPBIP:
             entradas = por_categoria.get(categoria, [])
             if not entradas:
                 continue
-            label = DAX_CATEGORY_LABELS.get(categoria, categoria.title())
+            label = _dax_cat_label(categoria)
             for entrada in sorted(entradas, key=lambda e: e.nome):
                 md.append(
                     f"| `{entrada.nome}` "
                     f"| {label} "
-                    f"| {entrada.descricao} "
-                    f"| {entrada.leitura_negocio} |"
+                    f"| {_dax_desc(entrada)} "
+                    f"| {_dax_business(entrada)} |"
                 )
         # Categorias fora da ordem padrao (caso existam)
         for categoria, entradas in por_categoria.items():
             if categoria in DAX_CATEGORY_ORDER:
                 continue
-            label = DAX_CATEGORY_LABELS.get(categoria, categoria.title())
+            label = _dax_cat_label(categoria)
             for entrada in sorted(entradas, key=lambda e: e.nome):
                 md.append(
                     f"| `{entrada.nome}` "
                     f"| {label} "
-                    f"| {entrada.descricao} "
-                    f"| {entrada.leitura_negocio} |"
+                    f"| {_dax_desc(entrada)} "
+                    f"| {_dax_business(entrada)} |"
                 )
         md.append("")
         md.append("---")
@@ -3517,7 +3638,7 @@ class DocumentadorPBIP:
                 md.append(
                     f"| {escape_md_table(termo.termo)} "
                     f"| {termo.frequencia} "
-                    f"| {escape_md_table(termo.categoria)} "
+                    f"| {escape_md_table(self._localizar_categoria_termo(termo.categoria))} "
                     f"| {escape_md_table(onde_aparece)} "
                     f"| {escape_md_table(exemplos)} |"
                 )
@@ -4529,7 +4650,7 @@ class DocumentadorPBIP:
                 linhas_agrupadas = _agrupar_linhas_regra_consecutivas(regra.linhas_regra)
                 rows = [
                     [
-                        linha.etapa.replace("`", ""),
+                        _localize_etapa_pq(linha.etapa).replace("`", ""),
                         linha.regra.replace("`", ""),
                         linha.descricao.replace("`", ""),
                     ]
@@ -4869,7 +4990,7 @@ class DocumentadorPBIP:
                 rows_dic.append([
                     termo.termo,
                     str(termo.frequencia),
-                    termo.categoria,
+                    self._localizar_categoria_termo(termo.categoria),
                     ", ".join(termo.fontes[:5]) or "—",
                     "; ".join(termo.exemplos[:3]) or "—",
                 ])
