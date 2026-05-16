@@ -664,6 +664,9 @@ _EN_US: Dict[str, str] = {
     "docx.tcard.status_visible": "Visible",
     "docx.tcard.status_hidden": "Hidden",
 
+    # Tables summary intro paragraph (DOCX)
+    "docx.tables_summary_intro": "The model has {n} tables with {cols} columns, {meds} measures and {calc} calculated columns.",
+
     # -------------------------------------------------------------------
     # DAX category labels (used in glossary table + leitura compacta)
     # -------------------------------------------------------------------

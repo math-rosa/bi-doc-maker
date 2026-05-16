@@ -2877,6 +2877,76 @@ class DocumentadorPBIP:
             return categoria_pt
         return i18n.t_or(key, categoria_pt)
 
+    # Tipos de fonte que aparecem na coluna "Onde aparece" do dicionario.
+    _DICT_SOURCE_TYPE_EN = {
+        "Projeto": "Project",
+        "Grupo de consulta": "Query group",
+        "Tabela": "Table",
+        "Coluna": "Column",
+        "Coluna calculada": "Calculated column",
+        "Medida": "Measure",
+        "Hierarquia": "Hierarchy",
+        "Relacionamento": "Relationship",
+        "Pagina": "Page",
+        "Página": "Page",
+        "Visual": "Visual",
+        "Filtro": "Filter",
+        "Power Query M": "Power Query M",
+        "DAX": "DAX",
+    }
+
+    # Contextos passados a registrar() que viram sufixo dos exemplos.
+    _DICT_CONTEXT_EN = {
+        "Nome da tabela": "Table name",
+        "Descrição da tabela": "Table description",
+        "Nome da coluna": "Column name",
+        "Coluna de origem": "Source column",
+        "Categoria de dados": "Data category",
+        "Nome da coluna calculada": "Calculated column name",
+        "Referência usada na expressão DAX": "Reference used in DAX expression",
+        "Nome da medida": "Measure name",
+        "Descrição da medida": "Measure description",
+        "Referência usada na medida DAX": "Reference used in DAX measure",
+        "Nome da hierarquia": "Hierarchy name",
+        "Nível da hierarquia": "Hierarchy level",
+        "Grupo de consulta da tabela": "Query group of the table",
+        "Comentário BI_DOC": "BI_DOC comment",
+        "Etapa Power Query": "Power Query step",
+        "Regra Power Query": "Power Query rule",
+        "Texto encontrado no código M": "Text found in M code",
+        "Tabela de origem": "Source table",
+        "Tabela de destino": "Target table",
+        "Coluna de destino": "Target column",
+    }
+
+    def _localizar_fonte_dict(self, fonte_pt: str) -> str:
+        """Traduz tipo de fonte ('Tabela', 'Coluna'...) para o locale ativo."""
+        if i18n.get_locale() == "en_US":
+            return self._DICT_SOURCE_TYPE_EN.get(fonte_pt, fonte_pt)
+        return fonte_pt
+
+    def _localizar_contexto_dict(self, contexto_pt: str) -> str:
+        """Traduz contexto/sufixo ('Nome da tabela'...) para o locale ativo."""
+        if i18n.get_locale() == "en_US":
+            return self._DICT_CONTEXT_EN.get(contexto_pt, contexto_pt)
+        return contexto_pt
+
+    def _localizar_exemplo_dict(self, exemplo_pt: str) -> str:
+        """Traduz um exemplo no formato 'Tipo: nome - contexto'."""
+        if i18n.get_locale() != "en_US":
+            return exemplo_pt
+        # Format esperado: "Tipo: nome - contexto"
+        if ":" in exemplo_pt:
+            tipo, resto = exemplo_pt.split(":", 1)
+            tipo_en = self._localizar_fonte_dict(tipo.strip())
+            resto = resto.strip()
+            if " - " in resto:
+                nome, ctx = resto.rsplit(" - ", 1)
+                ctx_en = self._localizar_contexto_dict(ctx.strip())
+                return f"{tipo_en}: {nome.strip()} - {ctx_en}"
+            return f"{tipo_en}: {resto}"
+        return exemplo_pt
+
     def _categoria_termo_dicionario(self, chave: str, fontes: List[str]) -> str:
         palavras = set(str(chave or "").split())
         fontes_set = set(fontes or [])
@@ -3633,8 +3703,10 @@ class DocumentadorPBIP:
             )
             md.append("|---|---:|---|---|---|")
             for termo in dicionario_dados:
-                onde_aparece = ", ".join(termo.fontes[:5]) or "-"
-                exemplos = "; ".join(termo.exemplos[:3]) or "-"
+                fontes_loc = [self._localizar_fonte_dict(f) for f in termo.fontes[:5]]
+                onde_aparece = ", ".join(fontes_loc) or "-"
+                exemplos_loc = [self._localizar_exemplo_dict(e) for e in termo.exemplos[:3]]
+                exemplos = "; ".join(exemplos_loc) or "-"
                 md.append(
                     f"| {escape_md_table(termo.termo)} "
                     f"| {termo.frequencia} "
@@ -3773,7 +3845,10 @@ class DocumentadorPBIP:
             num_colunas = len(tabela.colunas)
             num_medidas = len(tabela.medidas)
             num_calc = len(tabela.colunas_calculadas)
-            fonte = "DAX" if tabela.particao and _codigo_fonte_eh_dax(tabela.particao.codigo_fonte) else "Importação"
+            if tabela.particao and _codigo_fonte_eh_dax(tabela.particao.codigo_fonte):
+                fonte = "DAX"
+            else:
+                fonte = i18n.t_or("docx.tcard.source_import", "Importação")
             if tabela.particao and tabela.particao.grupo_consulta:
                 fonte = tabela.particao.grupo_consulta
             md.append(f"| {idx} | **{tabela.nome}** | {num_colunas} | {num_medidas} | {num_calc} | {fonte} |")
@@ -4987,12 +5062,14 @@ class DocumentadorPBIP:
             _add_info_box(_t("docx.info.dict_intro"), "info")
             rows_dic = []
             for termo in dicionario_dados:
+                fontes_loc = [self._localizar_fonte_dict(f) for f in termo.fontes[:5]]
+                exemplos_loc = [self._localizar_exemplo_dict(e) for e in termo.exemplos[:3]]
                 rows_dic.append([
                     termo.termo,
                     str(termo.frequencia),
                     self._localizar_categoria_termo(termo.categoria),
-                    ", ".join(termo.fontes[:5]) or "—",
-                    "; ".join(termo.exemplos[:3]) or "—",
+                    ", ".join(fontes_loc) or "—",
+                    "; ".join(exemplos_loc) or "—",
                 ])
             _add_table(
                 [
@@ -5119,13 +5196,22 @@ class DocumentadorPBIP:
         doc.add_heading(_t("docx.section.tables_summary"), level=1)
 
         p = doc.add_paragraph()
-        run = p.add_run(f"O modelo contém {len(self.tabelas)} tabelas com {total_colunas} colunas, "
-                        f"{total_medidas} medidas e {total_calc} colunas calculadas.")
+        run = p.add_run(
+            i18n.t_or(
+                "docx.tables_summary_intro",
+                f"O modelo contém {len(self.tabelas)} tabelas com {total_colunas} colunas, "
+                f"{total_medidas} medidas e {total_calc} colunas calculadas.",
+                n=len(self.tabelas),
+                cols=total_colunas,
+                meds=total_medidas,
+                calc=total_calc,
+            )
+        )
         _set_run_font(run, FONT_MAIN, FONT_BODY, CINZA_LT, italic=True)
 
         rows_resumo = []
         for idx, tabela in enumerate(self.tabelas, 1):
-            fonte = "Importação"
+            fonte = i18n.t_or("docx.tcard.source_import", "Importação")
             if tabela.particao:
                 if tabela.particao.grupo_consulta:
                     fonte = tabela.particao.grupo_consulta
