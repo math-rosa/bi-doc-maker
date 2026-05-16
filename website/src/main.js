@@ -1,4 +1,7 @@
 ﻿import './style.css'
+import { setupI18n } from './i18n.js'
+
+setupI18n();
 
 // Adiciona rolagem suave para links de âncora.
 document.querySelectorAll('a[href^="#"]').forEach(anchor => {

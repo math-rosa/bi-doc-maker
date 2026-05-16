@@ -239,6 +239,55 @@ body {
   color: var(--text-primary);
 }
 
+/* Lang switcher (bandeiras) */
+.lang-switcher {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 11px;
+}
+
+.lang-flag {
+  width: 32px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  cursor: pointer;
+  opacity: 0.55;
+  transition: opacity 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.lang-flag svg {
+  width: 22px;
+  height: auto;
+  display: block;
+  border-radius: 2px;
+  box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.12);
+}
+
+.lang-flag:hover {
+  opacity: 0.85;
+}
+
+.lang-flag.active {
+  opacity: 1;
+  border-color: var(--accent-primary);
+  background: rgba(59, 143, 212, 0.12);
+}
+
+.lang-flag:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+
 /* Hero Section */
 .hero {
   padding: calc(var(--spacing-xxl) + 60px) 0 var(--spacing-xl);

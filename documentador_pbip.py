@@ -959,12 +959,12 @@ def _resumo_funcoes_catalogo(funcoes: List[CatalogoFuncao], principal: str = "",
 
     texto = "; ".join(itens[:limite])
     if len(itens) > limite:
-        texto += f"; e mais {len(itens) - limite} função(ões)"
-    return f" Funções auxiliares detectadas: {texto}."
+        texto += i18n.t("pq.desc.more_functions", n=len(itens) - limite)
+    return i18n.t("pq.desc.aux_functions", items=texto)
 
 
 def _descricao_catalogo_generica(nome_etapa: str, funcao: CatalogoFuncao, funcoes: List[CatalogoFuncao]) -> str:
-    descricao = f"Etapa `{nome_etapa}` {funcao.leitura_negocio}"
+    descricao = i18n.t("pq.desc.generic", step=nome_etapa, action=funcao.leitura_negocio)
     if not descricao.endswith("."):
         descricao += "."
     return descricao + _resumo_funcoes_catalogo(funcoes, funcao.nome)
@@ -998,7 +998,12 @@ def _principal_funcao_power_query(expressao: str, padrao: str = "") -> str:
 
 
 def _descricao_executiva_power_query(texto: str) -> str:
-    texto = re.sub(r"\s+Funções auxiliares detectadas:.*$", ".", str(texto or "")).strip()
+    # Limpa o sufixo "Funcoes auxiliares detectadas: ..." em PT ou EN.
+    texto = re.sub(
+        r"\s+(?:Funções auxiliares detectadas|Auxiliary functions detected):.*$",
+        ".",
+        str(texto or ""),
+    ).strip()
     texto = re.sub(r"\.{2,}$", ".", texto)
     return texto
 
@@ -1010,113 +1015,107 @@ def _linha_regra_power_query(etapa: EtapaPowerQuery) -> LinhaRegraPowerQuery:
     funcao_principal = _principal_funcao_power_query(etapa.expressao)
     funcao_token = _token_codigo(funcao_principal, 60)
     descricao_etapa = _descricao_executiva_power_query(etapa.descricao)
+    step = etapa.nome
 
     if etapa.categoria == "origem":
         if re.search(r"\{\s*\[.+?\]\s*\}\s*\[", etapa.expressao, re.S):
             return LinhaRegraPowerQuery(
                 "Navegação",
-                "Objeto da origem",
-                f"Etapa `{etapa.nome}` navega para um objeto específico dentro da origem de dados.",
+                i18n.t("pq.rule.navigation_object"),
+                i18n.t("pq.desc.navigation", step=step),
             )
-        regra = funcao_token or "Fonte de dados"
-        return LinhaRegraPowerQuery(
-            "Fonte",
-            regra,
-            descricao_etapa,
-        )
+        regra = funcao_token or i18n.t("pq.rule.data_source")
+        return LinhaRegraPowerQuery("Fonte", regra, descricao_etapa)
 
     if "table.selectrows" in expr_lower:
         condicao = _extrair_condicao_each(etapa.expressao)
-        regra = _token_codigo(condicao, 140) if condicao else funcao_token or "Filtro"
-        descricao = (
-            f"Etapa `{etapa.nome}` mantém apenas os registros que atendem à condição informada."
-            if condicao else descricao_etapa
-        )
+        regra = _token_codigo(condicao, 140) if condicao else funcao_token or i18n.t("pq.rule.filter")
+        descricao = i18n.t("pq.desc.filter", step=step) if condicao else descricao_etapa
         return LinhaRegraPowerQuery("Filtro", regra, descricao)
 
     if "table.selectcolumns" in expr_lower:
-        descricao = f"Etapa `{etapa.nome}` mantém somente as colunas: {colunas}." if colunas else etapa.descricao
-        return LinhaRegraPowerQuery("Seleção de Colunas", funcao_token or "Colunas selecionadas", descricao)
+        descricao = i18n.t("pq.desc.select_cols", step=step, cols=colunas) if colunas else etapa.descricao
+        return LinhaRegraPowerQuery("Seleção de Colunas", funcao_token or i18n.t("pq.rule.selected_columns"), descricao)
 
     if "table.removecolumns" in expr_lower:
-        descricao = f"Etapa `{etapa.nome}` remove as colunas: {colunas}." if colunas else etapa.descricao
-        return LinhaRegraPowerQuery("Remoção de Colunas", funcao_token or "Colunas removidas", descricao)
+        descricao = i18n.t("pq.desc.remove_cols", step=step, cols=colunas) if colunas else etapa.descricao
+        return LinhaRegraPowerQuery("Remoção de Colunas", funcao_token or i18n.t("pq.rule.removed_columns"), descricao)
 
     if "table.renamecolumns" in expr_lower:
         pares = [f"{strings[i]} -> {strings[i + 1]}" for i in range(0, len(strings) - 1, 2)]
         regra = _token_codigo(_resumir_lista(pares, 4), 120) if pares else funcao_token
-        descricao = f"Etapa `{etapa.nome}` padroniza nomes de colunas." if pares else etapa.descricao
-        return LinhaRegraPowerQuery("Renomeação", regra or "Renomeação de colunas", descricao)
+        descricao = i18n.t("pq.desc.rename", step=step) if pares else etapa.descricao
+        return LinhaRegraPowerQuery("Renomeação", regra or i18n.t("pq.rule.rename_columns"), descricao)
 
     if "table.transformcolumntypes" in expr_lower:
-        descricao = f"Etapa `{etapa.nome}` ajusta os tipos de dados das colunas: {colunas}." if colunas else etapa.descricao
-        return LinhaRegraPowerQuery("Tipagem", funcao_token or "Conversão de tipos", descricao)
+        descricao = i18n.t("pq.desc.type_cast", step=step, cols=colunas) if colunas else etapa.descricao
+        return LinhaRegraPowerQuery("Tipagem", funcao_token or i18n.t("pq.rule.type_conversion"), descricao)
 
     if "table.addcolumn" in expr_lower:
         nome_coluna = strings[0] if strings else ""
-        regra = f"Coluna calculada: {_token_codigo(nome_coluna, 70)}" if nome_coluna else funcao_token
-        descricao = f"Etapa `{etapa.nome}` cria uma coluna calculada a partir de regra definida em M."
-        return LinhaRegraPowerQuery("Coluna Calculada", regra or "Nova coluna", descricao)
+        regra = i18n.t("pq.rule.calc_column_prefix", name=_token_codigo(nome_coluna, 70)) if nome_coluna else funcao_token
+        descricao = i18n.t("pq.desc.calc_column", step=step)
+        return LinhaRegraPowerQuery("Coluna Calculada", regra or i18n.t("pq.rule.new_column"), descricao)
 
     if "table.nestedjoin" in expr_lower or "table.join" in expr_lower:
-        descricao = f"Etapa `{etapa.nome}` combina dados com outra consulta/tabela."
+        descricao = i18n.t("pq.desc.join", step=step)
         if colunas:
-            descricao += f" Chaves ou campos citados: {colunas}."
-        return LinhaRegraPowerQuery("Merge / Junção", funcao_token or "Junção entre consultas", descricao)
+            descricao += i18n.t("pq.desc.join_keys", cols=colunas)
+        return LinhaRegraPowerQuery("Merge / Junção", funcao_token or i18n.t("pq.rule.join_between_queries"), descricao)
 
     if "table.combine" in expr_lower:
-        return LinhaRegraPowerQuery("Append", funcao_token or "Anexação de consultas", descricao_etapa)
+        return LinhaRegraPowerQuery("Append", funcao_token or i18n.t("pq.rule.append_queries"), descricao_etapa)
 
     if (
         "table.expandtablecolumn" in expr_lower
         or "table.expandrecordcolumn" in expr_lower
         or "table.expandlistcolumn" in expr_lower
     ):
-        descricao = f"Etapa `{etapa.nome}` expande campos relacionados."
+        descricao = i18n.t("pq.desc.expand", step=step)
         if colunas:
-            descricao += f" Campos expandidos: {colunas}."
-        return LinhaRegraPowerQuery("Expansão", funcao_token or "Campos expandidos", descricao)
+            descricao += i18n.t("pq.desc.expand_cols", cols=colunas)
+        return LinhaRegraPowerQuery("Expansão", funcao_token or i18n.t("pq.rule.expanded_fields"), descricao)
 
     if "table.group" in expr_lower:
-        descricao = f"Etapa `{etapa.nome}` resume registros por chaves de análise."
+        descricao = i18n.t("pq.desc.group", step=step)
         if colunas:
-            descricao += f" Campos citados: {colunas}."
-        return LinhaRegraPowerQuery("Agrupamento", funcao_token or "Agrupamento e agregação", descricao)
+            descricao += i18n.t("pq.desc.group_cols", cols=colunas)
+        return LinhaRegraPowerQuery("Agrupamento", funcao_token or i18n.t("pq.rule.group_aggregate"), descricao)
 
     if "table.pivot" in expr_lower:
-        return LinhaRegraPowerQuery("Pivot", funcao_token or "Linhas para colunas", descricao_etapa)
+        return LinhaRegraPowerQuery("Pivot", funcao_token or i18n.t("pq.rule.rows_to_cols"), descricao_etapa)
 
     if "table.unpivot" in expr_lower:
-        return LinhaRegraPowerQuery("Unpivot", funcao_token or "Colunas para linhas", descricao_etapa)
+        return LinhaRegraPowerQuery("Unpivot", funcao_token or i18n.t("pq.rule.cols_to_rows"), descricao_etapa)
 
     if "table.sort" in expr_lower:
-        descricao = f"Etapa `{etapa.nome}` ordena os registros."
+        descricao = i18n.t("pq.desc.sort", step=step)
         if colunas:
-            descricao += f" Campos de ordenação: {colunas}."
-        return LinhaRegraPowerQuery("Ordenação", funcao_token or "Ordenação de linhas", descricao)
+            descricao += i18n.t("pq.desc.sort_cols", cols=colunas)
+        return LinhaRegraPowerQuery("Ordenação", funcao_token or i18n.t("pq.rule.row_sort"), descricao)
 
     if "table.distinct" in expr_lower or "table.removeduplicates" in expr_lower:
-        descricao = f"Etapa `{etapa.nome}` remove registros duplicados."
+        descricao = i18n.t("pq.desc.dedup", step=step)
         if colunas:
-            descricao += f" Campos considerados: {colunas}."
-        return LinhaRegraPowerQuery("Deduplicação", funcao_token or "Remoção de duplicidades", descricao)
+            descricao += i18n.t("pq.desc.dedup_cols", cols=colunas)
+        return LinhaRegraPowerQuery("Deduplicação", funcao_token or i18n.t("pq.rule.dedup"), descricao)
 
     if "table.replacevalue" in expr_lower:
         regra = _token_codigo(" -> ".join(strings[:2]), 90) if len(strings) >= 2 else funcao_token
-        return LinhaRegraPowerQuery("Substituição de Valores", regra or "Substituição", descricao_etapa)
+        return LinhaRegraPowerQuery("Substituição de Valores", regra or i18n.t("pq.rule.replace"), descricao_etapa)
 
     if "table.promoteheaders" in expr_lower:
-        return LinhaRegraPowerQuery("Cabeçalhos", funcao_token or "Primeira linha como cabeçalho", descricao_etapa)
+        return LinhaRegraPowerQuery("Cabeçalhos", funcao_token or i18n.t("pq.rule.promote_headers"), descricao_etapa)
 
     if (
         "table.removerowswitherrors" in expr_lower
         or "table.selectrowswitherrors" in expr_lower
         or "table.replaceerrorvalues" in expr_lower
     ):
-        return LinhaRegraPowerQuery("Tratamento de Erros", funcao_token or "Tratamento de erros", descricao_etapa)
+        return LinhaRegraPowerQuery("Tratamento de Erros", funcao_token or i18n.t("pq.rule.error_handling"), descricao_etapa)
 
     if "table.skip" in expr_lower or "table.removerows" in expr_lower or "table.firstn" in expr_lower or "table.lastn" in expr_lower:
-        return LinhaRegraPowerQuery("Recorte de Linhas", funcao_token or "Limite/remoção por posição", descricao_etapa)
+        return LinhaRegraPowerQuery("Recorte de Linhas", funcao_token or i18n.t("pq.rule.row_limit"), descricao_etapa)
 
     if "try" in expr_lower and "otherwise" in expr_lower:
         return LinhaRegraPowerQuery("Tratamento de Erro", _token_codigo("try ... otherwise"), descricao_etapa)
@@ -1127,13 +1126,13 @@ def _linha_regra_power_query(etapa: EtapaPowerQuery) -> LinhaRegraPowerQuery:
     if etapa.categoria == "personalizada":
         return LinhaRegraPowerQuery(
             "Transformação Personalizada",
-            "Transformação personalizada",
-            f"Etapa `{etapa.nome}` não foi classificada automaticamente. Consulte o código M original para detalhe completo.",
+            i18n.t("pq.rule.custom_transform"),
+            i18n.t("pq.desc.custom", step=step),
         )
 
     return LinhaRegraPowerQuery(
         POWER_QUERY_CATEGORY_LABELS.get(etapa.categoria, etapa.categoria.title()),
-        funcao_token or "Transformação",
+        funcao_token or i18n.t("pq.rule.transform"),
         descricao_etapa,
     )
 
@@ -1184,78 +1183,77 @@ def _classificar_etapa_power_query(nome: str, expressao: str) -> EtapaPowerQuery
     origem = _detectar_origem_power_query(expressao)
     funcoes_catalogo = _detectar_funcoes_catalogo(expressao, POWER_QUERY_FUNCTION_CATALOG)
 
+    def _cols_suffix() -> str:
+        return i18n.t("pq.cls.cols_suffix", cols=colunas) if colunas else ""
+
     if origem:
         principal = funcoes_catalogo[0].nome if funcoes_catalogo else ""
         return EtapaPowerQuery(
             nome,
             expressao,
             "origem",
-            f"Etapa `{nome}` conecta ou lê dados de {origem}."
+            i18n.t("pq.cls.source", step=nome, source=origem)
             + _resumo_funcoes_catalogo(funcoes_catalogo, principal),
         )
     if re.search(r"\{\s*\[.+?\]\s*\}\s*\[", expressao, re.S):
-        return EtapaPowerQuery(nome, expressao, "origem", f"Etapa `{nome}` navega para um objeto específico dentro da origem de dados.")
+        return EtapaPowerQuery(nome, expressao, "origem", i18n.t("pq.desc.navigation", step=nome))
     if "table.selectrows" in expr_lower:
         condicao = _extrair_condicao_each(expressao)
-        detalhe = f" usando a condição `{condicao}`" if condicao else ""
-        return EtapaPowerQuery(nome, expressao, "filtro", f"Etapa `{nome}` filtra linhas{detalhe}." + _resumo_funcoes_catalogo(funcoes_catalogo, "Table.SelectRows"))
+        detalhe = i18n.t("pq.cls.filter_detail", condition=condicao) if condicao else ""
+        return EtapaPowerQuery(nome, expressao, "filtro", i18n.t("pq.cls.filter", step=nome, detail=detalhe) + _resumo_funcoes_catalogo(funcoes_catalogo, "Table.SelectRows"))
     if "table.nestedjoin" in expr_lower or "table.join" in expr_lower:
-        detalhe = f" Colunas/chaves citadas: {colunas}." if colunas else ""
+        detalhe = i18n.t("pq.cls.join_detail", cols=colunas) if colunas else ""
         principal = "Table.NestedJoin" if "table.nestedjoin" in expr_lower else "Table.Join"
-        return EtapaPowerQuery(nome, expressao, "integracao", f"Etapa `{nome}` combina dados com outra consulta ou tabela.{detalhe}" + _resumo_funcoes_catalogo(funcoes_catalogo, principal))
+        return EtapaPowerQuery(nome, expressao, "integracao", i18n.t("pq.cls.join", step=nome, detail=detalhe) + _resumo_funcoes_catalogo(funcoes_catalogo, principal))
     if "table.combine" in expr_lower:
-        return EtapaPowerQuery(nome, expressao, "integracao", f"Etapa `{nome}` empilha/anexa dados de múltiplas consultas ou tabelas." + _resumo_funcoes_catalogo(funcoes_catalogo, "Table.Combine"))
+        return EtapaPowerQuery(nome, expressao, "integracao", i18n.t("pq.cls.combine", step=nome) + _resumo_funcoes_catalogo(funcoes_catalogo, "Table.Combine"))
     if "table.expandtablecolumn" in expr_lower or "table.expandrecordcolumn" in expr_lower:
-        detalhe = f" Campos expandidos: {colunas}." if colunas else ""
+        detalhe = i18n.t("pq.cls.expand_detail", cols=colunas) if colunas else ""
         principal = "Table.ExpandTableColumn" if "table.expandtablecolumn" in expr_lower else "Table.ExpandRecordColumn"
-        return EtapaPowerQuery(nome, expressao, "integracao", f"Etapa `{nome}` expande colunas vindas de consulta relacionada.{detalhe}" + _resumo_funcoes_catalogo(funcoes_catalogo, principal))
+        return EtapaPowerQuery(nome, expressao, "integracao", i18n.t("pq.cls.expand", step=nome, detail=detalhe) + _resumo_funcoes_catalogo(funcoes_catalogo, principal))
     if "table.removecolumns" in expr_lower:
-        detalhe = f": {colunas}" if colunas else ""
-        return EtapaPowerQuery(nome, expressao, "transformacao", f"Etapa `{nome}` remove colunas{detalhe}." + _resumo_funcoes_catalogo(funcoes_catalogo, "Table.RemoveColumns"))
+        return EtapaPowerQuery(nome, expressao, "transformacao", i18n.t("pq.cls.remove_cols", step=nome, detail=_cols_suffix()) + _resumo_funcoes_catalogo(funcoes_catalogo, "Table.RemoveColumns"))
     if "table.selectcolumns" in expr_lower:
-        detalhe = f": {colunas}" if colunas else ""
-        return EtapaPowerQuery(nome, expressao, "transformacao", f"Etapa `{nome}` mantém somente colunas selecionadas{detalhe}." + _resumo_funcoes_catalogo(funcoes_catalogo, "Table.SelectColumns"))
+        return EtapaPowerQuery(nome, expressao, "transformacao", i18n.t("pq.cls.select_cols", step=nome, detail=_cols_suffix()) + _resumo_funcoes_catalogo(funcoes_catalogo, "Table.SelectColumns"))
     if "table.renamecolumns" in expr_lower:
         pares = [f"{strings[i]} -> {strings[i + 1]}" for i in range(0, len(strings) - 1, 2)]
-        detalhe = f": {_resumir_lista(pares, 5)}" if pares else ""
-        return EtapaPowerQuery(nome, expressao, "transformacao", f"Etapa `{nome}` renomeia colunas{detalhe}." + _resumo_funcoes_catalogo(funcoes_catalogo, "Table.RenameColumns"))
+        detalhe = i18n.t("pq.cls.cols_suffix", cols=_resumir_lista(pares, 5)) if pares else ""
+        return EtapaPowerQuery(nome, expressao, "transformacao", i18n.t("pq.cls.rename_cols", step=nome, detail=detalhe) + _resumo_funcoes_catalogo(funcoes_catalogo, "Table.RenameColumns"))
     if "table.transformcolumntypes" in expr_lower:
-        detalhe = f": {colunas}" if colunas else ""
-        return EtapaPowerQuery(nome, expressao, "transformacao", f"Etapa `{nome}` ajusta tipos de dados das colunas{detalhe}." + _resumo_funcoes_catalogo(funcoes_catalogo, "Table.TransformColumnTypes"))
+        return EtapaPowerQuery(nome, expressao, "transformacao", i18n.t("pq.cls.type_cast", step=nome, detail=_cols_suffix()) + _resumo_funcoes_catalogo(funcoes_catalogo, "Table.TransformColumnTypes"))
     if "table.addcolumn" in expr_lower:
-        detalhe = f" `{strings[0]}`" if strings else ""
-        return EtapaPowerQuery(nome, expressao, "transformacao", f"Etapa `{nome}` cria coluna calculada{detalhe}." + _resumo_funcoes_catalogo(funcoes_catalogo, "Table.AddColumn"))
+        detalhe = i18n.t("pq.cls.col_suffix", col=strings[0]) if strings else ""
+        return EtapaPowerQuery(nome, expressao, "transformacao", i18n.t("pq.cls.add_column", step=nome, detail=detalhe) + _resumo_funcoes_catalogo(funcoes_catalogo, "Table.AddColumn"))
     if "table.group" in expr_lower:
-        detalhe = f" por {colunas}" if colunas else ""
-        return EtapaPowerQuery(nome, expressao, "agregacao", f"Etapa `{nome}` agrupa registros{detalhe}." + _resumo_funcoes_catalogo(funcoes_catalogo, "Table.Group"))
+        detalhe = i18n.t("pq.cls.group_detail", cols=colunas) if colunas else ""
+        return EtapaPowerQuery(nome, expressao, "agregacao", i18n.t("pq.cls.group", step=nome, detail=detalhe) + _resumo_funcoes_catalogo(funcoes_catalogo, "Table.Group"))
     if "table.sort" in expr_lower:
-        detalhe = f": {colunas}" if colunas else ""
-        return EtapaPowerQuery(nome, expressao, "transformacao", f"Etapa `{nome}` ordena linhas{detalhe}." + _resumo_funcoes_catalogo(funcoes_catalogo, "Table.Sort"))
+        return EtapaPowerQuery(nome, expressao, "transformacao", i18n.t("pq.cls.sort", step=nome, detail=_cols_suffix()) + _resumo_funcoes_catalogo(funcoes_catalogo, "Table.Sort"))
     if "table.removerowswitherrors" in expr_lower or "table.selectrowswitherrors" in expr_lower:
         principal = "Table.RemoveRowsWithErrors" if "table.removerowswitherrors" in expr_lower else "Table.SelectRowsWithErrors"
         return EtapaPowerQuery(nome, expressao, "qualidade", _descricao_catalogo_generica(nome, POWER_QUERY_FUNCTION_CATALOG[principal], funcoes_catalogo))
     if "table.distinct" in expr_lower or "table.removeduplicates" in expr_lower:
-        detalhe = f" considerando {colunas}" if colunas else ""
+        detalhe = i18n.t("pq.cls.dedup_detail", cols=colunas) if colunas else ""
         principal = "Table.Distinct" if "table.distinct" in expr_lower else "Table.RemoveDuplicates"
-        return EtapaPowerQuery(nome, expressao, "qualidade", f"Etapa `{nome}` remove duplicidades{detalhe}." + _resumo_funcoes_catalogo(funcoes_catalogo, principal))
+        return EtapaPowerQuery(nome, expressao, "qualidade", i18n.t("pq.cls.dedup", step=nome, detail=detalhe) + _resumo_funcoes_catalogo(funcoes_catalogo, principal))
     if "table.replacevalue" in expr_lower:
-        return EtapaPowerQuery(nome, expressao, "qualidade", f"Etapa `{nome}` substitui valores em colunas da tabela." + _resumo_funcoes_catalogo(funcoes_catalogo, "Table.ReplaceValue"))
+        return EtapaPowerQuery(nome, expressao, "qualidade", i18n.t("pq.cls.replace", step=nome) + _resumo_funcoes_catalogo(funcoes_catalogo, "Table.ReplaceValue"))
     if "table.unpivot" in expr_lower:
         principal = "Table.UnpivotOtherColumns" if "table.unpivotothercolumns" in expr_lower else "Table.Unpivot"
-        return EtapaPowerQuery(nome, expressao, "agregacao", f"Etapa `{nome}` transforma colunas em linhas (unpivot)." + _resumo_funcoes_catalogo(funcoes_catalogo, principal))
+        return EtapaPowerQuery(nome, expressao, "agregacao", i18n.t("pq.cls.unpivot", step=nome) + _resumo_funcoes_catalogo(funcoes_catalogo, principal))
     if "table.pivot" in expr_lower:
-        return EtapaPowerQuery(nome, expressao, "agregacao", f"Etapa `{nome}` transforma valores de linhas em colunas (pivot)." + _resumo_funcoes_catalogo(funcoes_catalogo, "Table.Pivot"))
+        return EtapaPowerQuery(nome, expressao, "agregacao", i18n.t("pq.cls.pivot", step=nome) + _resumo_funcoes_catalogo(funcoes_catalogo, "Table.Pivot"))
     if "table.promoteheaders" in expr_lower:
-        return EtapaPowerQuery(nome, expressao, "transformacao", f"Etapa `{nome}` promove a primeira linha para cabeçalhos." + _resumo_funcoes_catalogo(funcoes_catalogo, "Table.PromoteHeaders"))
+        return EtapaPowerQuery(nome, expressao, "transformacao", i18n.t("pq.cls.promote_headers", step=nome) + _resumo_funcoes_catalogo(funcoes_catalogo, "Table.PromoteHeaders"))
     if "table.skip" in expr_lower or "table.removerows" in expr_lower or "table.firstn" in expr_lower:
         principal = "Table.Skip" if "table.skip" in expr_lower else ("Table.FirstN" if "table.firstn" in expr_lower else "Table.RemoveRows")
-        return EtapaPowerQuery(nome, expressao, "filtro", f"Etapa `{nome}` limita ou remove linhas por posição/quantidade." + _resumo_funcoes_catalogo(funcoes_catalogo, principal))
+        return EtapaPowerQuery(nome, expressao, "filtro", i18n.t("pq.cls.row_limit", step=nome) + _resumo_funcoes_catalogo(funcoes_catalogo, principal))
 
     if funcoes_catalogo:
         funcao = funcoes_catalogo[0]
         return EtapaPowerQuery(nome, expressao, funcao.categoria, _descricao_catalogo_generica(nome, funcao, funcoes_catalogo))
 
-    return EtapaPowerQuery(nome, expressao, "personalizada", f"Etapa `{nome}` executa transformação personalizada/não classificada.")
+    return EtapaPowerQuery(nome, expressao, "personalizada", i18n.t("pq.cls.custom", step=nome))
 
 
 def analisar_power_query_m(codigo: str) -> RegraPowerQuery:
