@@ -247,6 +247,56 @@ body {
   fill: currentColor;
 }
 
+/* === Seletor de idioma (bandeiras) === */
+.lang-switcher {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  margin-right: 8px;
+  background: var(--surface-2, rgba(127, 127, 127, 0.08));
+  border: 1px solid var(--border, rgba(127, 127, 127, 0.18));
+  border-radius: 11px;
+}
+
+.lang-flag {
+  width: 30px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  cursor: pointer;
+  opacity: 0.55;
+  transition: opacity 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+}
+
+.lang-flag svg {
+  width: 22px;
+  height: auto;
+  display: block;
+  border-radius: 2px;
+  box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.12);
+}
+
+.lang-flag:hover {
+  opacity: 0.85;
+}
+
+.lang-flag.active {
+  opacity: 1;
+  border-color: var(--accent, #3b8fd4);
+  background: rgba(59, 143, 212, 0.12);
+}
+
+.lang-flag:focus-visible {
+  outline: 2px solid var(--accent, #3b8fd4);
+  outline-offset: 1px;
+}
+
 /* === Update banner (atualizacao disponivel) === */
 .update-banner {
   flex: 0 0 auto;

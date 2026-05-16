@@ -3284,7 +3284,7 @@ class DocumentadorPBIP:
                 raise ValueError(f"Cor invalida em {chave}: use o formato #RRGGBB.")
             return valor.upper()
 
-        titulo = valor_texto("documentTitle", "document_title") or "Documentação Power BI"
+        titulo = valor_texto("documentTitle", "document_title") or _t("cover.document_title_default")
         logo_raw = valor_texto("logoPath", "logo_path")
         logo_path = None
         if logo_raw:

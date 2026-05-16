@@ -4,6 +4,7 @@
   import { invoke } from "@tauri-apps/api/tauri";
   import { getVersion } from "@tauri-apps/api/app";
   import { z } from "zod";
+  import { t, locale, localeForCore, setLocale, translate, type Locale } from "./i18n";
 
   type OutputFormat = "md" | "docx" | "html";
   type ThemeMode = "light" | "dark";
@@ -46,11 +47,7 @@
   type UpdateInfo = z.infer<typeof UpdateInfoSchema>;
 
   const outputFormats: OutputFormat[] = ["md", "docx", "html"];
-  const formatLabels: Record<OutputFormat, string> = {
-    md: "Markdown",
-    docx: "Word",
-    html: "HTML / Salvar PDF"
-  };
+  // Labels reativas via $t("format.{key}") direto no template.
 
   const defaultFormats: Record<OutputFormat, boolean> = {
     md: true,
@@ -59,7 +56,9 @@
   };
 
   const defaultBranding: BrandingOptions = {
-    documentTitle: "Documentação Power BI",
+    // Vazio = sidecar Python escolhe o titulo padrao conforme idioma (Fase 2).
+    // O placeholder do input mostra o titulo localizado como hint visual.
+    documentTitle: "",
     logoPath: "",
     primaryColor: "#003D6B",
     secondaryColor: "#006DAA",
@@ -100,8 +99,8 @@
   $: outputPathLabel =
     outputPath ||
     (selectedProjectsList.length > 1 && selectedPath
-      ? `${selectedPath} (lote → pasta selecionada)`
-      : "Pasta do projeto");
+      ? $t("modal.output_batch_suffix", { path: selectedPath })
+      : $t("modal.output_default"));
   $: anyOutputs = Object.values(projectOutputs).some(
     (o) => Object.keys(o).length > 0
   );
@@ -192,7 +191,7 @@
     try {
       await invoke("open_external_url", { url: updateInfo.release_url });
     } catch (error) {
-      errorMessage = `Nao foi possivel abrir a release: ${String(error)}`;
+      errorMessage = translate("err.open_release", { detail: String(error) });
     }
   };
 
@@ -222,7 +221,7 @@
     try {
       await invoke("open_external_url", { url });
     } catch (error) {
-      errorMessage = `Nao foi possivel abrir o link: ${String(error)}`;
+      errorMessage = translate("err.open_link", { detail: String(error) });
     }
   };
 
@@ -249,10 +248,10 @@
       projectStatus = Object.fromEntries(parsed.map((p) => [p.path, "idle" as ProjectStatus]));
       scanCompleted = true;
       if (parsed.length === 0) {
-        errorMessage = "Nenhum projeto Power BI (.pbip) encontrado nessa pasta.";
+        errorMessage = translate("err.no_projects");
       }
     } catch (error) {
-      errorMessage = `Falha ao escanear a pasta: ${String(error)}`;
+      errorMessage = translate("err.scan_failed", { detail: String(error) });
     } finally {
       isScanning = false;
     }
@@ -336,14 +335,14 @@
 
   const formatError = (err: string) => {
     if (err.includes("O core Python nao retornou resposta") || err.includes("timed out")) {
-      return "O processamento falhou ou demorou demais para responder.";
+      return translate("err.processing_timeout");
     }
     return String(err);
   };
 
   const exportDocumentation = async () => {
     if (selectedProjectsList.length === 0 || activeFormats.length === 0) {
-      errorMessage = "Selecione ao menos um projeto e um formato.";
+      errorMessage = translate("err.select_project_format");
       return;
     }
 
@@ -372,12 +371,13 @@
           path: project.path,
           outputDir: sharedOutputDir || project.path,
           formats: activeFormats,
-          branding
+          branding,
+          language: $localeForCore,
         });
 
         const parsedResult = CoreResultSchema.parse(result);
         if (!parsedResult.ok) {
-          throw new Error(parsedResult.error ?? "Falha ao gerar a documentação.");
+          throw new Error(parsedResult.error ?? translate("err.generation_failed"));
         }
 
         projectStatus = { ...projectStatus, [project.path]: "ok" };
@@ -401,7 +401,7 @@
       try {
         await invoke("open_output_file", { path: firstHtmlOutput });
       } catch (error) {
-        errorMessage = `Documentação gerada, mas falhou ao abrir o HTML: ${String(error)}`;
+        errorMessage = translate("err.open_html", { detail: String(error) });
       }
     }
   };
@@ -459,7 +459,7 @@
 <main class="app-shell">
   <section class="workspace">
     <header class="topbar">
-      <div class="brand" aria-label="BI Doc Maker">
+      <div class="brand" aria-label={$t("brand.aria_label")}>
         <span class="brand-logo" aria-hidden="true">
           <svg viewBox="0 0 64 64" fill="currentColor">
             <rect x="11" y="36" width="10" height="16" rx="2"/>
@@ -470,17 +470,51 @@
         <strong>BI Doc Maker</strong>
       </div>
 
-      <nav class="top-actions" aria-label="Links e tema">
-        <button class="icon-button" type="button" title="LinkedIn" aria-label="Abrir LinkedIn" on:click={() => openExternal(links.linkedin)}>
+      <nav class="top-actions" aria-label={$t("topbar.nav_aria")}>
+        <div class="lang-switcher" role="group" aria-label={$t("topbar.lang_aria")}>
+          <button
+            type="button"
+            class="lang-flag"
+            class:active={$locale === "pt-BR"}
+            title={$t("topbar.lang_pt_title")}
+            aria-label={$t("topbar.lang_pt_title")}
+            aria-pressed={$locale === "pt-BR"}
+            on:click={() => setLocale("pt-BR")}
+          >
+            <svg viewBox="0 0 14 10" aria-hidden="true">
+              <rect width="14" height="10" fill="#009c3b"/>
+              <polygon points="7,1 13,5 7,9 1,5" fill="#ffdf00"/>
+              <circle cx="7" cy="5" r="2" fill="#002776"/>
+            </svg>
+          </button>
+          <button
+            type="button"
+            class="lang-flag"
+            class:active={$locale === "en-US"}
+            title={$t("topbar.lang_en_title")}
+            aria-label={$t("topbar.lang_en_title")}
+            aria-pressed={$locale === "en-US"}
+            on:click={() => setLocale("en-US")}
+          >
+            <svg viewBox="0 0 19 10" aria-hidden="true">
+              <rect width="19" height="10" fill="#bf0a30"/>
+              <rect y="1.43" width="19" height="1.43" fill="#fff"/>
+              <rect y="4.28" width="19" height="1.43" fill="#fff"/>
+              <rect y="7.14" width="19" height="1.43" fill="#fff"/>
+              <rect width="8" height="5.71" fill="#002868"/>
+            </svg>
+          </button>
+        </div>
+        <button class="icon-button" type="button" title={$t("topbar.linkedin_title")} aria-label={$t("topbar.linkedin_aria")} on:click={() => openExternal(links.linkedin)}>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.94 8.98H3.53V20h3.41V8.98ZM5.24 4a1.98 1.98 0 1 0 0 3.96 1.98 1.98 0 0 0 0-3.96ZM20.47 13.68c0-3.2-1.7-4.96-4.18-4.96-1.9 0-2.75 1.04-3.23 1.77V8.98H9.79V20h3.41v-5.46c0-1.44.27-2.84 2.06-2.84 1.76 0 1.79 1.65 1.79 2.93V20h3.42v-6.32Z"/></svg>
         </button>
-        <button class="icon-button" type="button" title="GitHub" aria-label="Abrir GitHub" on:click={() => openExternal(links.github)}>
+        <button class="icon-button" type="button" title={$t("topbar.github_title")} aria-label={$t("topbar.github_aria")} on:click={() => openExternal(links.github)}>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.1.79-.25.79-.56v-2.14c-3.2.69-3.87-1.38-3.87-1.38-.52-1.33-1.28-1.68-1.28-1.68-1.04-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.76 2.7 1.25 3.36.96.1-.75.4-1.25.73-1.54-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.28 1.18-3.09-.12-.29-.51-1.46.11-3.04 0 0 .97-.31 3.17 1.18a10.95 10.95 0 0 1 5.76 0c2.2-1.49 3.16-1.18 3.16-1.18.63 1.58.24 2.75.12 3.04.74.81 1.18 1.83 1.18 3.09 0 4.42-2.69 5.4-5.25 5.69.41.36.78 1.06.78 2.14v3.15c0 .31.21.67.8.56A11.51 11.51 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5Z"/></svg>
         </button>
-        <button class="icon-button" type="button" title="Apoiar o projeto" aria-label="Apoiar o projeto" on:click={() => openExternal(links.support)}>
+        <button class="icon-button" type="button" title={$t("topbar.support_title")} aria-label={$t("topbar.support_aria")} on:click={() => openExternal(links.support)}>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21.35 10.55 20.03C5.4 15.36 2 12.27 2 8.5 2 5.41 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.08A5.98 5.98 0 0 1 16.5 3C19.58 3 22 5.41 22 8.5c0 3.77-3.4 6.86-8.55 11.54L12 21.35Z"/></svg>
         </button>
-        <button class="icon-button" type="button" title={theme === "dark" ? "Modo claro" : "Modo escuro"} aria-label={theme === "dark" ? "Ativar modo claro" : "Ativar modo escuro"} on:click={toggleTheme}>
+        <button class="icon-button" type="button" title={theme === "dark" ? $t("topbar.theme_light_title") : $t("topbar.theme_dark_title")} aria-label={theme === "dark" ? $t("topbar.theme_light_aria") : $t("topbar.theme_dark_aria")} on:click={toggleTheme}>
           {#if theme === "dark"}
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.76 4.84 5.34 3.42 3.92 4.84l1.42 1.42 1.42-1.42ZM1 13h3v-2H1v2Zm10-12v3h2V1h-2Zm9.08 3.84-1.42-1.42-1.42 1.42 1.42 1.42 1.42-1.42ZM17.24 19.16l1.42 1.42 1.42-1.42-1.42-1.42-1.42 1.42ZM20 11v2h3v-2h-3ZM4.92 19.16l1.42 1.42 1.42-1.42-1.42-1.42-1.42 1.42ZM11 20v3h2v-3h-2Zm1-14a6 6 0 1 0 0 12 6 6 0 0 0 0-12Z"/></svg>
           {:else}
@@ -499,14 +533,14 @@
           </svg>
         </span>
         <div class="update-text">
-          <strong>Atualização disponível: v{updateInfo.latest_version}</strong>
-          <span>Você está na v{updateInfo.current_version}. Veja as novidades e baixe na página da release.</span>
+          <strong>{$t("update.available", { version: updateInfo.latest_version })}</strong>
+          <span>{$t("update.current_hint", { current: updateInfo.current_version })}</span>
         </div>
         <div class="update-actions">
           <button type="button" class="update-primary" on:click={openUpdateRelease}>
-            Ver atualização
+            {$t("update.see")}
           </button>
-          <button type="button" class="update-dismiss" on:click={dismissUpdate} title="Ignorar esta versão" aria-label="Ignorar esta atualização">
+          <button type="button" class="update-dismiss" on:click={dismissUpdate} title={$t("update.dismiss_title")} aria-label={$t("update.dismiss_aria")}>
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
           </button>
         </div>
@@ -520,14 +554,14 @@
             class="folder-picker hero"
             type="button"
             on:click={pickProjectFolder}
-            aria-label="Selecionar pasta com projetos PBIP"
+            aria-label={$t("empty.cta_aria")}
           >
             <span class="folder-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h4.5l2 2.5h6.5A2.5 2.5 0 0 1 21 10v7.5A2.5 2.5 0 0 1 18.5 20h-13A2.5 2.5 0 0 1 3 17.5v-10Z"/></svg>
             </span>
             <span class="picker-copy">
-              <strong>Selecione a pasta com seus projetos PBIP</strong>
-              <span>Vamos varrer as subpastas e listar os projetos encontrados.</span>
+              <strong>{$t("empty.cta_title")}</strong>
+              <span>{$t("empty.cta_subtitle")}</span>
             </span>
           </button>
         </div>
@@ -537,18 +571,18 @@
           type="button"
           on:click={pickProjectFolder}
           disabled={isExporting || isScanning}
-          aria-label="Trocar pasta selecionada"
+          aria-label={$t("pathbar.change_aria")}
         >
           <span class="path-bar-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h4.5l2 2.5h6.5A2.5 2.5 0 0 1 21 10v7.5A2.5 2.5 0 0 1 18.5 20h-13A2.5 2.5 0 0 1 3 17.5v-10Z"/></svg>
           </span>
           <span class="path-bar-info">
-            <small>Pasta selecionada</small>
+            <small>{$t("pathbar.label")}</small>
             <strong title={cleanPath(selectedPath)}>{cleanPath(selectedPath)}</strong>
           </span>
           <span class="path-bar-change" aria-hidden="true">
             <svg viewBox="0 0 24 24"><path d="M12 4v8m0 0 4-4m-4 4-4-4M5 20h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            Trocar
+            {$t("pathbar.change")}
           </span>
         </button>
 
@@ -556,8 +590,8 @@
           <div class="state-card" aria-live="polite">
             <span class="spinner" aria-hidden="true"></span>
             <div>
-              <strong>Procurando projetos...</strong>
-              <span>Vasculhando subpastas em busca de arquivos .pbip.</span>
+              <strong>{$t("scanning.title")}</strong>
+              <span>{$t("scanning.subtitle")}</span>
             </div>
           </div>
         {/if}
@@ -568,13 +602,13 @@
               <div class="project-count-block">
                 <strong>
                   {#if hasActiveFilter}
-                    {filteredProjects.length} de {projects.length}
+                    {filteredProjects.length} {$locale === "pt-BR" ? "de" : "of"} {projects.length}
                   {:else}
                     {projects.length}
                   {/if}
-                  {projects.length === 1 ? "projeto encontrado" : "projetos encontrados"}
+                  {projects.length === 1 ? $t("panel.found_one") : $t("panel.found_many")}
                 </strong>
-                <small>{selectedProjectsList.length} marcado{selectedProjectsList.length === 1 ? "" : "s"}</small>
+                <small>{selectedProjectsList.length} {selectedProjectsList.length === 1 ? $t("panel.checked_one") : $t("panel.checked_many")}</small>
               </div>
               <div class="project-search" role="search">
                 <span class="search-icon" aria-hidden="true">
@@ -583,31 +617,31 @@
                 <input
                   type="search"
                   class="search-input"
-                  placeholder="Filtrar por nome ou caminho..."
+                  placeholder={$t("panel.search_placeholder")}
                   bind:value={searchQuery}
                   disabled={isExporting}
-                  aria-label="Filtrar lista de projetos"
+                  aria-label={$t("panel.search_aria")}
                 />
                 {#if hasActiveFilter}
-                  <button type="button" class="search-clear" on:click={clearSearch} title="Limpar filtro" aria-label="Limpar filtro">
+                  <button type="button" class="search-clear" on:click={clearSearch} title={$t("panel.search_clear_title")} aria-label={$t("panel.search_clear_aria")}>
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
                   </button>
                 {/if}
               </div>
               <div class="project-toolbar">
                 {#if projects.length > 1}
-                  <button type="button" on:click={selectAllProjects} disabled={isExporting || filteredProjects.length === 0}>Marcar todos</button>
-                  <button type="button" on:click={clearSelection} disabled={isExporting || filteredProjects.length === 0}>Limpar</button>
+                  <button type="button" on:click={selectAllProjects} disabled={isExporting || filteredProjects.length === 0}>{$t("panel.select_all")}</button>
+                  <button type="button" on:click={clearSelection} disabled={isExporting || filteredProjects.length === 0}>{$t("panel.clear_selection")}</button>
                 {/if}
-                <button type="button" on:click={rescanFolder} disabled={isExporting} title="Refazer varredura" aria-label="Re-escanear pasta">
+                <button type="button" on:click={rescanFolder} disabled={isExporting} title={$t("panel.rescan_title")} aria-label={$t("panel.rescan_aria")}>
                   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 0 1 14-5.3M20 4v5h-5M20 12a8 8 0 0 1-14 5.3M4 20v-5h5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                 </button>
               </div>
             </header>
             {#if filteredProjects.length === 0}
               <div class="project-list-empty">
-                <strong>Nenhum projeto bate com "{searchQuery}"</strong>
-                <button type="button" on:click={clearSearch}>Limpar filtro</button>
+                <strong>{$t("panel.empty_filtered", { query: searchQuery })}</strong>
+                <button type="button" on:click={clearSearch}>{$t("panel.empty_filtered_clear")}</button>
               </div>
             {:else}
               <ul class="project-list">
@@ -627,13 +661,13 @@
                     </label>
                     <span class="project-status" aria-live="polite">
                       {#if projectStatus[project.path] === "running"}
-                        <span class="spinner small" aria-label="Processando"></span>
+                        <span class="spinner small" aria-label={$t("project.processing_aria")}></span>
                       {:else if projectStatus[project.path] === "ok"}
-                        <button class="status-pill status-ok" type="button" on:click={() => openProjectOutput(project.path)} title="Abrir pasta deste projeto" aria-label="Sucesso, abrir pasta">
+                        <button class="status-pill status-ok" type="button" on:click={() => openProjectOutput(project.path)} title={$t("project.ok_pill_title")} aria-label={$t("project.ok_pill_aria")}>
                           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 5 5L20 7" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
                         </button>
                       {:else if projectStatus[project.path] === "error"}
-                        <span class="status-pill status-error" title={projectErrors[project.path] ?? "Erro"} aria-label={`Erro: ${projectErrors[project.path] ?? ""}`}>
+                        <span class="status-pill status-error" title={projectErrors[project.path] ?? $t("project.error_pill_title")} aria-label={$t("project.error_pill_aria", { message: projectErrors[project.path] ?? "" })}>
                           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>
                         </span>
                       {/if}
@@ -647,8 +681,8 @@
 
         {#if scanCompleted && !hasProjects && !errorMessage && !isScanning}
           <div class="state-card empty-result">
-            <strong>Nenhum projeto PBIP encontrado</strong>
-            <span>Verifique se a pasta selecionada contém arquivos <code>.pbip</code> ou subpastas com modelos Power BI.</span>
+            <strong>{$t("result.empty_title")}</strong>
+            <span>{$t("result.empty_subtitle")}</span>
           </div>
         {/if}
       {/if}
@@ -660,7 +694,7 @@
           <svg viewBox="0 0 24 24"><path d="M12 9v4m0 4h.01M10.3 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.7 3.86a2 2 0 0 0-3.4 0Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </span>
         <div>
-          <strong>Erro</strong>
+          <strong>{$t("notice.error_title")}</strong>
           <span>{errorMessage}</span>
         </div>
       </section>
@@ -677,18 +711,20 @@
         </span>
         <div>
           <strong>
-            {batchSummary.ok}/{batchSummary.total} {batchSummary.total === 1 ? "documentação gerada" : "documentações geradas"}
+            {batchSummary.total === 1
+              ? $t("batch.summary_one", { ok: batchSummary.ok, total: batchSummary.total })
+              : $t("batch.summary_many", { ok: batchSummary.ok, total: batchSummary.total })}
           </strong>
           <span>
             {#if batchSummary.error > 0}
-              {batchSummary.error} falharam. Veja os detalhes em cada projeto na lista.
+              {$t("batch.partial_fail", { n: batchSummary.error })}
             {:else}
-              Tudo certo! Documentação salva.
+              {$t("batch.success")}
             {/if}
           </span>
         </div>
         {#if batchSummary.ok > 0}
-          <button type="button" class="notice-action" on:click={openOutputFolder}>Abrir pasta</button>
+          <button type="button" class="notice-action" on:click={openOutputFolder}>{$t("batch.open_folder")}</button>
         {/if}
       </section>
     {/if}
@@ -704,12 +740,12 @@
             <line x1="12" y1="17" x2="20" y2="17"/>
             <circle cx="10" cy="17" r="2"/>
           </svg>
-          <span>Mais Opções</span>
+          <span>{$t("action.more_options")}</span>
         </button>
         <button class="primary action-button" type="button" disabled={!canExport} on:click={exportDocumentation}>
           {#if isExporting}
             <span class="spinner small" aria-hidden="true"></span>
-            <span>Gerando {currentProjectName || "..."}</span>
+            <span>{$t("action.generating", { project: currentProjectName || $t("action.generating_idle") })}</span>
           {:else}
             <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
               <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5Z"/>
@@ -717,7 +753,7 @@
               <line x1="12" y1="11" x2="12" y2="17"/>
               <polyline points="9 14 12 17 15 14"/>
             </svg>
-            <span>Gerar Documentação ({selectedProjectsList.length})</span>
+            <span>{$t("action.generate", { n: selectedProjectsList.length })}</span>
           {/if}
         </button>
       </footer>
@@ -730,20 +766,20 @@
     <section class="options-modal" role="dialog" aria-modal="true" aria-labelledby="options-title">
       <header class="modal-header">
         <div class="modal-titles">
-          <h2 id="options-title">Mais Opções</h2>
-          <p class="modal-subtitle">Personalize a documentação que será gerada.</p>
+          <h2 id="options-title">{$t("modal.title")}</h2>
+          <p class="modal-subtitle">{$t("modal.subtitle")}</p>
         </div>
-        <button class="icon-button" type="button" title="Fechar" aria-label="Fechar opções" on:click={() => (showOptions = false)}>
+        <button class="icon-button" type="button" title={$t("modal.close_title")} aria-label={$t("modal.close_aria")} on:click={() => (showOptions = false)}>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
         </button>
       </header>
 
       <section class="option-group">
         <header class="option-group-header">
-          <h3>Formatos de exportação</h3>
-          <small>Selecione um ou mais formatos.</small>
+          <h3>{$t("modal.formats_title")}</h3>
+          <small>{$t("modal.formats_subtitle")}</small>
         </header>
-        <div class="chip-group" role="group" aria-label="Formatos de exportação">
+        <div class="chip-group" role="group" aria-label={$t("modal.formats_group_aria")}>
           {#each outputFormats as format}
             <button
               type="button"
@@ -757,7 +793,7 @@
                   <svg viewBox="0 0 24 24"><path d="m5 12 5 5L20 7" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
                 {/if}
               </span>
-              <span class="chip-label">{formatLabels[format]}</span>
+              <span class="chip-label">{$t(`format.${format}`)}</span>
             </button>
           {/each}
         </div>
@@ -765,70 +801,70 @@
 
       <section class="option-group">
         <header class="option-group-header">
-          <h3>Pasta de saída</h3>
-          <small>No modo lote, todos os projetos compartilham essa pasta.</small>
+          <h3>{$t("modal.output_title")}</h3>
+          <small>{$t("modal.output_subtitle")}</small>
         </header>
         <div class="input-row">
           <input class="input-readonly" readonly value={outputPathLabel} title={outputPathLabel} />
-          <button type="button" on:click={pickOutputFolder}>Selecionar</button>
-          <button type="button" on:click={resetOutputFolder} disabled={!outputPath}>Padrão</button>
+          <button type="button" on:click={pickOutputFolder}>{$t("modal.output_pick")}</button>
+          <button type="button" on:click={resetOutputFolder} disabled={!outputPath}>{$t("modal.output_default_btn")}</button>
         </div>
       </section>
 
       <section class="option-group">
         <header class="option-group-header">
-          <h3>Título da documentação</h3>
-          <small>Aparece na capa de cada documento.</small>
+          <h3>{$t("modal.title_doc_heading")}</h3>
+          <small>{$t("modal.title_doc_subtitle")}</small>
         </header>
         <input
           class="text-input"
           type="text"
           bind:value={branding.documentTitle}
-          placeholder="Documentação Power BI"
+          placeholder={$t("modal.title_doc_placeholder")}
           on:input={persistPreferences}
-          aria-label="Título exibido no documento"
+          aria-label={$t("modal.title_doc_aria")}
         />
       </section>
 
       <section class="option-group">
         <header class="option-group-header">
-          <h3>Logo da empresa</h3>
-          <small>PNG ou JPG, exibido na capa.</small>
+          <h3>{$t("modal.logo_heading")}</h3>
+          <small>{$t("modal.logo_subtitle")}</small>
         </header>
         <div class="input-row">
-          <input class="input-readonly" readonly value={branding.logoPath || "Nenhum logo selecionado"} title={branding.logoPath || "Nenhum logo selecionado"} />
-          <button type="button" on:click={pickLogo}>Selecionar</button>
-          <button type="button" on:click={removeLogo} disabled={!branding.logoPath}>Remover</button>
+          <input class="input-readonly" readonly value={branding.logoPath || $t("modal.logo_empty")} title={branding.logoPath || $t("modal.logo_empty")} />
+          <button type="button" on:click={pickLogo}>{$t("modal.logo_pick")}</button>
+          <button type="button" on:click={removeLogo} disabled={!branding.logoPath}>{$t("modal.logo_remove")}</button>
         </div>
       </section>
 
       <section class="option-group">
         <header class="option-group-header">
-          <h3>Cores da documentação</h3>
-          <small>Definem o esquema visual aplicado.</small>
+          <h3>{$t("modal.colors_heading")}</h3>
+          <small>{$t("modal.colors_subtitle")}</small>
         </header>
         <div class="color-list">
           <label class="color-row">
-            <input type="color" class="color-input" bind:value={branding.primaryColor} on:change={persistPreferences} aria-label="Cor primária" />
-            <span class="color-name">Primária</span>
+            <input type="color" class="color-input" bind:value={branding.primaryColor} on:change={persistPreferences} aria-label={$t("modal.color_primary_aria")} />
+            <span class="color-name">{$t("modal.color_primary")}</span>
             <code class="color-hex">{branding.primaryColor.toUpperCase()}</code>
           </label>
           <label class="color-row">
-            <input type="color" class="color-input" bind:value={branding.secondaryColor} on:change={persistPreferences} aria-label="Cor secundária" />
-            <span class="color-name">Secundária</span>
+            <input type="color" class="color-input" bind:value={branding.secondaryColor} on:change={persistPreferences} aria-label={$t("modal.color_secondary_aria")} />
+            <span class="color-name">{$t("modal.color_secondary")}</span>
             <code class="color-hex">{branding.secondaryColor.toUpperCase()}</code>
           </label>
           <label class="color-row">
-            <input type="color" class="color-input" bind:value={branding.lightColor} on:change={persistPreferences} aria-label="Cor de fundo claro" />
-            <span class="color-name">Fundo claro</span>
+            <input type="color" class="color-input" bind:value={branding.lightColor} on:change={persistPreferences} aria-label={$t("modal.color_light_aria")} />
+            <span class="color-name">{$t("modal.color_light")}</span>
             <code class="color-hex">{branding.lightColor.toUpperCase()}</code>
           </label>
         </div>
       </section>
 
       <footer class="modal-footer">
-        <button type="button" on:click={restoreDefaults}>Restaurar padrões</button>
-        <button class="primary" type="button" on:click={() => (showOptions = false)}>Concluir</button>
+        <button type="button" on:click={restoreDefaults}>{$t("modal.restore_defaults")}</button>
+        <button class="primary" type="button" on:click={() => (showOptions = false)}>{$t("modal.finish")}</button>
       </footer>
     </section>
   </div>
