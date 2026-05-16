@@ -169,13 +169,33 @@ fn open_cross_platform(path: String) -> Result<(), String> {
     cmd.map(|_| ()).map_err(|error| format!("Falha ao abrir: {error}"))
 }
 
+/// Normaliza o codigo de idioma vindo do frontend. Aceita pt/pt-BR/pt_BR/en/en-US/en_US.
+/// Default seguro: "pt". O sidecar Python tambem normaliza, mas filtramos aqui
+/// para nao injetar valores arbitrarios em argv.
+fn normalize_lang(lang: Option<String>) -> String {
+    match lang {
+        Some(s) => {
+            let lower = s.trim().to_lowercase().replace('-', "_");
+            if lower.starts_with("en") {
+                "en".to_string()
+            } else {
+                "pt".to_string()
+            }
+        }
+        None => "pt".to_string(),
+    }
+}
+
 #[tauri::command]
-async fn analyze_project(path: String) -> Result<Value, String> {
+async fn analyze_project(path: String, language: Option<String>) -> Result<Value, String> {
     let valid_path = validate_path(&path)?;
+    let lang = normalize_lang(language);
     run_core_async(vec![
         "analyze".to_string(),
         "--project".to_string(),
         valid_path,
+        "--lang".to_string(),
+        lang,
         "--json".to_string(),
     ]).await
 }
@@ -186,13 +206,15 @@ async fn export_project(
     output_dir: String,
     formats: Vec<String>,
     branding: Option<Value>,
+    language: Option<String>,
 ) -> Result<Value, String> {
     if formats.is_empty() {
         return Err("Selecione pelo menos um formato de exportacao.".to_string());
     }
-    
+
     let valid_path = validate_path(&path)?;
     let valid_output_dir = validate_path(&output_dir)?;
+    let lang = normalize_lang(language);
 
     let mut args = vec![
         "export".to_string(),
@@ -202,6 +224,8 @@ async fn export_project(
         valid_output_dir,
         "--formats".to_string(),
         formats.join(","),
+        "--lang".to_string(),
+        lang,
         "--json".to_string(),
     ];
 

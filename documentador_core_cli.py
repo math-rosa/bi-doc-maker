@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Dict, List
 
 from documentador_pbip import DocumentadorPBIP
+import i18n
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s", stream=sys.stderr)
 logger = logging.getLogger(__name__)
@@ -120,6 +121,7 @@ def _analisar(caminho_projeto: str) -> DocumentadorPBIP:
 
 def comando_analyze(args: argparse.Namespace, logs: CapturaLogs) -> Dict:
     with redirect_stdout(logs):
+        i18n.set_locale(getattr(args, "lang", "pt") or "pt")
         project_fixed = _fix_mojibake(args.project)
         doc = _analisar(project_fixed)
         return doc.gerar_resumo_estruturado(warnings=logs.avisos())
@@ -127,6 +129,7 @@ def comando_analyze(args: argparse.Namespace, logs: CapturaLogs) -> Dict:
 
 def comando_export(args: argparse.Namespace, logs: CapturaLogs) -> Dict:
     with redirect_stdout(logs):
+        i18n.set_locale(getattr(args, "lang", "pt") or "pt")
         formatos = _normalizar_formatos(args.formats)
         # Recupera mojibake potencial em paths e branding antes de usar.
         project_fixed = _fix_mojibake(args.project)
@@ -146,8 +149,9 @@ def comando_export(args: argparse.Namespace, logs: CapturaLogs) -> Dict:
         doc.aplicar_branding(branding)
         outputs: Dict[str, str] = {}
 
+        filename_suffix = i18n.t("filename.suffix")
         for formato in formatos:
-            caminho_saida = output_dir / f"{doc.nome_projeto}_documentacao.{formato}"
+            caminho_saida = output_dir / f"{doc.nome_projeto}{filename_suffix}.{formato}"
             if formato == "md":
                 gerado = doc.salvar_documentacao(str(caminho_saida))
             elif formato == "docx":
@@ -168,8 +172,13 @@ def _criar_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="documentador-core")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
+    # Idioma da documentacao gerada (e tambem do nome do arquivo).
+    # Aceita pt, pt_BR, pt-BR, en, en_US, en-US (case-insensitive). Default: pt.
+    LANG_HELP = "Idioma da documentacao (pt|en). Default: pt."
+
     analyze = subparsers.add_parser("analyze", help="Analisa um projeto Power BI.")
     analyze.add_argument("--project", required=True, help="Pasta do projeto .pbip.")
+    analyze.add_argument("--lang", default="pt", help=LANG_HELP)
     analyze.add_argument("--json", action="store_true", help="Mantido para contrato com o sidecar.")
 
     export = subparsers.add_parser("export", help="Exporta a documentacao do projeto.")
@@ -177,6 +186,7 @@ def _criar_parser() -> argparse.ArgumentParser:
     export.add_argument("--output-dir", required=True, help="Pasta onde os arquivos serao salvos.")
     export.add_argument("--formats", required=True, help="Formatos separados por virgula: md,docx,html.")
     export.add_argument("--branding-json", help="JSON opcional com logoPath, primaryColor, secondaryColor e lightColor.")
+    export.add_argument("--lang", default="pt", help=LANG_HELP)
     export.add_argument("--json", action="store_true", help="Mantido para contrato com o sidecar.")
 
     return parser
