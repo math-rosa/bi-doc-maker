@@ -652,13 +652,24 @@ body {
 
 /* === PBIX notice (arquivos legados que precisam conversao manual) === */
 .pbix-notice {
-  flex: 0 0 auto;
-  margin-top: 12px;
+  /* flex shrinkable, evita empurrar a project-panel para fora da viewport
+     quando o usuario aponta para uma pasta com centenas de .pbix */
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: 45vh;
+  display: flex;
+  flex-direction: column;
   padding: 14px 16px;
   border: 1px solid rgba(245, 158, 11, 0.32);
   border-radius: 12px;
   background: linear-gradient(180deg, rgba(245, 158, 11, 0.08), rgba(245, 158, 11, 0.04));
   color: var(--text);
+}
+
+.pbix-notice-header,
+.pbix-steps,
+.pbix-footnote {
+  flex: 0 0 auto;
 }
 
 .pbix-notice-header {
@@ -707,6 +718,11 @@ body {
 }
 
 .pbix-list {
+  /* scroll interno: header/steps/footnote ficam fixos, lista rola */
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   list-style: none;
   margin: 0;
   padding: 8px;
