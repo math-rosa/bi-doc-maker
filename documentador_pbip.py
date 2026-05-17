@@ -4442,7 +4442,10 @@ class DocumentadorPBIP:
             toc_items.append(f'{letra}) <a href="#{slug}">{tabela.nome}</a><br/>')
         toc_items.append('</div>')
         toc_items.append('</li>')
-        toc_items.append(_toc_li("doc.toc.relationships"))
+        # Relacionamentos NAO entra como item raiz no TOC: a secao e
+        # renderizada como `### Lista de Relacionamentos` (h3) dentro de
+        # "Modelo de Dados" (h2), entao um link `#relacionamentos` era
+        # ancora morta. Quem quiser ir direto la usa o link "Modelo de Dados".
         if self.visuais_personalizados:
             toc_items.append(_toc_li("doc.toc.custom_visuals"))
         toc_items.append(_toc_li("doc.toc.image_resources"))
@@ -5343,7 +5346,12 @@ class DocumentadorPBIP:
 
         html = self._gerar_html_documentacao(auto_print=auto_print)
 
-        with open(caminho_saida, 'w', encoding='utf-8-sig') as f:
+        # UTF-8 SEM BOM. O `<meta charset="utf-8">` no head ja sinaliza a
+        # codificacao para o navegador. BOM (utf-8-sig) gera 3 bytes EF BB BF
+        # no inicio que alguns visualizadores/IDEs interpretam como caracteres
+        # latin-1, cascateando mojibake (`DocumentaÃ§Ã£o` em vez de
+        # `Documentação`) — vista no doc do Sebrae/PMO v0.9.1.
+        with open(caminho_saida, 'w', encoding='utf-8', newline='\n') as f:
             f.write(html)
 
         print(f"[OK] Documentacao HTML salva em: {caminho_saida}")
