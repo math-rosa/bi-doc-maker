@@ -1,7 +1,7 @@
 {
   "name": "bi-doc-maker",
   "private": true,
-  "version": "0.8.1",
+  "version": "0.8.2",
   "description": "BI Doc Maker desktop app for documenting Power BI PBIP projects",
   "author": "Math Rosa",
   "license": "MIT",

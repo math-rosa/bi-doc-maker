@@ -145,8 +145,17 @@
     if (storedBranding) {
       try {
         const parsed = JSON.parse(storedBranding) as Partial<BrandingOptions>;
+        // Migration: titles iguais aos defaults conhecidos (v0.7.x/v0.8.x) viram ""
+        // para deixar o sidecar usar o titulo localizado conforme idioma ativo.
+        const KNOWN_DEFAULTS = new Set([
+          "",
+          "Documentação Power BI",
+          "Power BI Documentation",
+        ]);
+        const rawTitle = parsed.documentTitle ?? "";
+        const docTitle = KNOWN_DEFAULTS.has(rawTitle.trim()) ? "" : rawTitle;
         branding = {
-          documentTitle: parsed.documentTitle ?? defaultBranding.documentTitle,
+          documentTitle: docTitle,
           logoPath: parsed.logoPath ?? "",
           primaryColor: parsed.primaryColor ?? defaultBranding.primaryColor,
           secondaryColor: parsed.secondaryColor ?? defaultBranding.secondaryColor,

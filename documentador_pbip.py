@@ -693,8 +693,14 @@ def traduzir_tipo_visual(tipo: str) -> str:
 
 
 def traduzir_enum_pbir(valor: str) -> str:
-    """Traduz valor de enum do PBIR (Drillthrough, Categorical, etc.) para pt-BR."""
+    """Traduz valor de enum do PBIR (Drillthrough, Categorical, etc.) para o locale ativo.
+
+    Quando locale=en_US, retorna o enum original em ingles (Drillthrough,
+    Categorical, etc.) que e exatamente como o PBIR ja entrega.
+    """
     if not valor:
+        return valor
+    if i18n.get_locale() == "en_US":
         return valor
     return PBIR_ENUM_TRANSLATIONS.get(valor, valor)
 
@@ -964,7 +970,9 @@ def _resumo_funcoes_catalogo(funcoes: List[CatalogoFuncao], principal: str = "",
 
 
 def _descricao_catalogo_generica(nome_etapa: str, funcao: CatalogoFuncao, funcoes: List[CatalogoFuncao]) -> str:
-    descricao = i18n.t("pq.desc.generic", step=nome_etapa, action=funcao.leitura_negocio)
+    # i18n: tenta traducao por funcao do catalogo M; fallback ao texto PT no dataclass.
+    acao = i18n.t_or(f"m_func.{funcao.nome}.business", funcao.leitura_negocio)
+    descricao = i18n.t("pq.desc.generic", step=nome_etapa, action=acao)
     if not descricao.endswith("."):
         descricao += "."
     return descricao + _resumo_funcoes_catalogo(funcoes, funcao.nome)
@@ -1146,33 +1154,50 @@ def _extrair_condicao_each(expressao: str) -> str:
     return _limitar_texto(condicao, 220)
 
 
+_POWER_QUERY_ORIGEM_PT = [
+    ("Sql.Database",              "SQL Server"),
+    ("Oracle.Database",           "Oracle"),
+    ("PostgreSQL.Database",       "PostgreSQL"),
+    ("MySQL.Database",            "MySQL"),
+    ("Snowflake.Databases",       "Snowflake"),
+    ("AnalysisServices.Database", "Analysis Services"),
+    ("Odbc.DataSource",           "ODBC"),
+    ("OleDb.DataSource",          "OLE DB"),
+    ("Excel.Workbook",            "arquivo Excel"),
+    ("Csv.Document",              "arquivo CSV"),
+    ("Json.Document",             "arquivo JSON"),
+    ("Web.Contents",              "Web/API"),
+    ("OData.Feed",                "OData"),
+    ("SharePoint.Files",          "SharePoint"),
+    ("SharePoint.Contents",       "SharePoint"),
+    ("Folder.Files",              "pasta de arquivos"),
+    ("File.Contents",             "arquivo local"),
+    ("PowerPlatform.Dataflows",   "Dataflow Power Platform"),
+    ("Dataverse.Contents",        "Dataverse"),
+    ("Value.NativeQuery",         "consulta nativa na fonte de dados"),
+]
+
+_POWER_QUERY_ORIGEM_EN = {
+    "Excel.Workbook":          "Excel file",
+    "Csv.Document":            "CSV file",
+    "Json.Document":           "JSON file",
+    "Web.Contents":            "Web/API",
+    "Folder.Files":            "folder of files",
+    "File.Contents":           "local file",
+    "PowerPlatform.Dataflows": "Power Platform Dataflow",
+    "Value.NativeQuery":       "native query on the data source",
+    # Outros nomes ja sao identicos em EN (SQL Server, Oracle, PostgreSQL, etc.)
+}
+
+
 def _detectar_origem_power_query(expressao: str) -> str:
-    origens = [
-        ("Sql.Database", "SQL Server"),
-        ("Oracle.Database", "Oracle"),
-        ("PostgreSQL.Database", "PostgreSQL"),
-        ("MySQL.Database", "MySQL"),
-        ("Snowflake.Databases", "Snowflake"),
-        ("AnalysisServices.Database", "Analysis Services"),
-        ("Odbc.DataSource", "ODBC"),
-        ("OleDb.DataSource", "OLE DB"),
-        ("Excel.Workbook", "arquivo Excel"),
-        ("Csv.Document", "arquivo CSV"),
-        ("Json.Document", "arquivo JSON"),
-        ("Web.Contents", "Web/API"),
-        ("OData.Feed", "OData"),
-        ("SharePoint.Files", "SharePoint"),
-        ("SharePoint.Contents", "SharePoint"),
-        ("Folder.Files", "pasta de arquivos"),
-        ("File.Contents", "arquivo local"),
-        ("PowerPlatform.Dataflows", "Dataflow Power Platform"),
-        ("Dataverse.Contents", "Dataverse"),
-        ("Value.NativeQuery", "consulta nativa na fonte de dados"),
-    ]
     expr_lower = expressao.lower()
-    for funcao, descricao in origens:
+    use_en = i18n.get_locale() == "en_US"
+    for funcao, descricao_pt in _POWER_QUERY_ORIGEM_PT:
         if funcao.lower() in expr_lower:
-            return descricao
+            if use_en:
+                return _POWER_QUERY_ORIGEM_EN.get(funcao, descricao_pt)
+            return descricao_pt
     return ""
 
 
@@ -1560,6 +1585,7 @@ _POWER_QUERY_ETAPA_PLURAIS = {
 _POWER_QUERY_ETAPA_EN = {
     # PT name -> (EN label, EN singular, EN plural)
     "Fonte":                       ("Source",            "source",            "sources"),
+    "Navegação":                   ("Navigation",        "navigation",        "navigations"),
     "Tipagem":                     ("Type cast",         "type cast",         "type casts"),
     "Filtro":                      ("Filter",            "filter",            "filters"),
     "Renomeação":                  ("Rename",            "rename",            "renames"),
@@ -3724,7 +3750,10 @@ class DocumentadorPBIP:
         md.append(_t("pages.total", n=len(self.paginas)))
         md.append(f"")
         if self.paginas:
-            md.append(f"| # | Nome | Tipo | Dimensões | Filtros |")
+            md.append(
+                f"| {_t('pages.col.idx')} | {_t('pages.col.name')} | {_t('pages.col.type')} | "
+                f"{_t('pages.col.dimensions')} | {_t('pages.col.filters')} |"
+            )
             md.append(f"|---|------|------|-----------|---------|")
 
             for i, pagina in enumerate(self.paginas, 1):
@@ -3744,13 +3773,16 @@ class DocumentadorPBIP:
             paginas_com_filtros = [(p, f) for p, f in paginas_com_filtros if f]
 
             if paginas_com_filtros:
-                md.append(f"### 🔍 Filtros de Página")
+                md.append(f"### {_t('pages.section.filters')}")
                 md.append(f"")
 
                 for pagina, filtros in paginas_com_filtros:
                     md.append(f"**{pagina.nome_exibicao}**")
                     md.append(f"")
-                    md.append(f"| Tabela | Coluna | Tipo | Valores |")
+                    md.append(
+                        f"| {_t('pages.filter.col.table')} | {_t('pages.filter.col.column')} | "
+                        f"{_t('pages.filter.col.type')} | {_t('pages.filter.col.values')} |"
+                    )
                     md.append(f"|--------|--------|------|---------|")
 
                     for f in filtros:
@@ -3952,9 +3984,9 @@ class DocumentadorPBIP:
                     md.append(f"")
                     info_parts = []
                     if coluna.tipo_dado:
-                        info_parts.append(f"**Tipo**: `{coluna.tipo_dado}`")
+                        info_parts.append(f"**{_t('calc_col.label.type')}**: `{coluna.tipo_dado}`")
                     if coluna.formato:
-                        info_parts.append(f"**Formato**: `{coluna.formato}`")
+                        info_parts.append(f"**{_t('calc_col.label.format')}**: `{coluna.formato}`")
                     if info_parts:
                         md.append(" | ".join(info_parts))
                         md.append(f"")
@@ -4083,7 +4115,7 @@ class DocumentadorPBIP:
             md.append(f"")
             md.append(f"## {_t('doc.toc.custom_visuals')}")
             md.append(f"")
-            md.append(f"| ID do Visual |")
+            md.append(f"| {_t('custom_visuals.col.id')} |")
             md.append(f"|--------------|")
 
             for visual in self.visuais_personalizados:
@@ -4097,7 +4129,7 @@ class DocumentadorPBIP:
             md.append(f"")
             md.append(f"## {_t('doc.toc.image_resources')}")
             md.append(f"")
-            md.append(f"| Nome | Tipo |")
+            md.append(f"| {_t('image_resources.col.name')} | {_t('image_resources.col.type')} |")
             md.append(f"|------|------|")
 
             for recurso in self.recursos_imagem:

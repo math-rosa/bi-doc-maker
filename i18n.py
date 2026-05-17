@@ -219,6 +219,25 @@ _PT_BR: Dict[str, str] = {
     # -------------------------------------------------------------------
     "pages.total": "**Total de páginas: {n}**",
     "pages.empty_thin_report": "⚠️ Nenhuma página encontrada localmente. Este projeto pode ser um **relatório remoto** (thin report) onde as páginas ficam armazenadas no serviço Power BI.",
+    "pages.col.idx": "#",
+    "pages.col.name": "Nome",
+    "pages.col.type": "Tipo",
+    "pages.col.dimensions": "Dimensões",
+    "pages.col.filters": "Filtros",
+    "pages.section.filters": "🔍 Filtros de Página",
+    "pages.filter.col.table": "Tabela",
+    "pages.filter.col.column": "Coluna",
+    "pages.filter.col.type": "Tipo",
+    "pages.filter.col.values": "Valores",
+
+    # Visuais Personalizados + Recursos de Imagem (colunas MD)
+    "custom_visuals.col.id": "ID do Visual",
+    "image_resources.col.name": "Nome",
+    "image_resources.col.type": "Tipo",
+
+    # Inline labels para coluna calculada (cabecalho proprio na descricao DAX)
+    "calc_col.label.type": "Tipo",
+    "calc_col.label.format": "Formato",
 
     # -------------------------------------------------------------------
     # Mensagens [AVISO] e log (apenas console; ja em pt-BR)
@@ -625,6 +644,25 @@ _EN_US: Dict[str, str] = {
     # -------------------------------------------------------------------
     "pages.total": "**Total pages: {n}**",
     "pages.empty_thin_report": "⚠️ No page found locally. This project may be a **remote report** (thin report) where pages are stored on the Power BI service.",
+    "pages.col.idx": "#",
+    "pages.col.name": "Name",
+    "pages.col.type": "Type",
+    "pages.col.dimensions": "Dimensions",
+    "pages.col.filters": "Filters",
+    "pages.section.filters": "🔍 Page Filters",
+    "pages.filter.col.table": "Table",
+    "pages.filter.col.column": "Column",
+    "pages.filter.col.type": "Type",
+    "pages.filter.col.values": "Values",
+
+    # Custom Visuals + Image Resources (MD columns)
+    "custom_visuals.col.id": "Visual ID",
+    "image_resources.col.name": "Name",
+    "image_resources.col.type": "Type",
+
+    # Inline labels for calculated column (DAX description header)
+    "calc_col.label.type": "Type",
+    "calc_col.label.format": "Format",
 
     # -------------------------------------------------------------------
     # Log messages
@@ -825,6 +863,28 @@ _EN_US: Dict[str, str] = {
     "pq.cls.custom":                "Step `{step}` runs a custom/unclassified transformation.",
     "pq.cls.cols_suffix":           ": {cols}",
     "pq.cls.col_suffix":            " `{col}`",
+
+    # Power Query function business readings (EN translations).
+    # Used in _descricao_catalogo_generica via i18n.t_or; fallback to PT in dataclass.
+    # Covers the most user-visible functions in the final client doc.
+    "m_func.Table.ReplaceErrorValues.business":      "handles conversion errors without dropping the row.",
+    "m_func.Table.RemoveRowsWithErrors.business":    "removes invalid records caused by conversion or calculation.",
+    "m_func.Table.SelectRowsWithErrors.business":    "isolates problematic records for review or treatment.",
+    "m_func.Table.FillDown.business":                "propagates header/group values to rows below.",
+    "m_func.Table.FillUp.business":                  "propagates values from below to records above.",
+    "m_func.Table.Distinct.business":                "keeps unique combinations of records.",
+    "m_func.Table.RemoveDuplicates.business":        "ensures uniqueness by one or more keys.",
+    "m_func.Table.ReplaceValue.business":            "standardizes or corrects values in selected fields.",
+    "m_func.Table.Buffer.business":                  "stabilizes the read of one step before further transformations.",
+    "m_func.Table.PromoteHeaders.business":          "uses the first row of the file as column names.",
+    "m_func.Table.DemoteHeaders.business":           "turns column names into records.",
+    "m_func.Text.Clean.business":                    "sanitizes fields imported from files or systems.",
+    "m_func.Text.Trim.business":                     "cleans accidental spaces in text fields.",
+    "m_func.Text.Replace.business":                  "corrects textual patterns in fields.",
+    "m_func.Date.From.business":                     "ensures a date type for time analysis.",
+    "m_func.DateTime.From.business":                 "ensures temporal granularity with time.",
+    "m_func.try otherwise.business":                 "defines a contingency rule when a transformation fails.",
+    "m_func.if then else.business":                  "implements a conditional business rule.",
 
     # -------------------------------------------------------------------
     # DAX category labels (used in glossary table + leitura compacta)
