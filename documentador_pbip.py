@@ -2780,6 +2780,14 @@ def parse_tmdl_expressions(caminho: str) -> List[InfoNamedExpression]:
             nome = limpar_nome(m.group(1))
             primeiro_valor = (m.group(3) or "").strip()
 
+            # TMDL usa ``` como delimitador de string multilinha
+            # (`expression X = ``` ... ``` `). NAO eh conteudo do M — sao
+            # apenas fences sintaticos. Se nao removermos, vao para dentro
+            # de ```powerquery ... ``` no markdown gerado e quebrar o parser
+            # (cria fences aninhadas que viram code-block vazio + paragrafo).
+            if primeiro_valor == "```":
+                primeiro_valor = ""
+
             indent_expr = _tmdl_indent(linha)
             bloco, prox = _tmdl_coletar_bloco(linhas, i, indent_expr)
 
@@ -2792,6 +2800,9 @@ def parse_tmdl_expressions(caminho: str) -> List[InfoNamedExpression]:
                 sub_s = sub.strip()
                 if not sub_s:
                     corpo_pedacos.append("")
+                    continue
+                # Pula fences TMDL multilinha (``` no inicio ou fim do bloco)
+                if sub_s == "```":
                     continue
                 m_qg = re.match(r"^queryGroup\s*:\s*(.+)$", sub_s)
                 m_lt = re.match(r"^lineageTag\s*:\s*(.+)$", sub_s)
