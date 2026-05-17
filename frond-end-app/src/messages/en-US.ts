@@ -76,6 +76,7 @@ export const messages: Record<string, string> = {
   "pbix.step_4": "Save in a folder — Desktop generates the converted PBIP project",
   "pbix.step_5": "Come back here and pick the folder again to rescan",
   "pbix.requires_desktop": "Requires Power BI Desktop with PBIP support (2024 release or newer).",
+  "pbix.how_to_convert": "How to convert to PBIP",
 
   // ----- Error notice -----
   "notice.error_title": "Error",

@@ -651,40 +651,30 @@ body {
 }
 
 /* === PBIX notice (arquivos legados que precisam conversao manual) === */
+/* Compacto por design: 1 linha visivel + detalhes colapsados.
+   Evita roubar espaco da lista de PBIPs (que e o foco real do app). */
 .pbix-notice {
-  /* flex shrinkable, evita empurrar a project-panel para fora da viewport
-     quando o usuario aponta para uma pasta com centenas de .pbix */
-  flex: 0 1 auto;
-  min-height: 0;
-  max-height: 45vh;
-  display: flex;
-  flex-direction: column;
-  padding: 14px 16px;
+  flex: 0 0 auto;
+  padding: 10px 12px;
   border: 1px solid rgba(245, 158, 11, 0.32);
   border-radius: 12px;
   background: linear-gradient(180deg, rgba(245, 158, 11, 0.08), rgba(245, 158, 11, 0.04));
   color: var(--text);
 }
 
-.pbix-notice-header,
-.pbix-steps,
-.pbix-footnote {
-  flex: 0 0 auto;
-}
-
 .pbix-notice-header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 10px;
-  margin-bottom: 10px;
+  flex-wrap: wrap;
 }
 
 .pbix-icon {
   flex: 0 0 auto;
-  width: 22px;
-  height: 22px;
+  width: 18px;
+  height: 18px;
   color: #d97706;
-  margin-top: 2px;
+  display: inline-flex;
 }
 
 .pbix-icon svg {
@@ -693,71 +683,67 @@ body {
 }
 
 .pbix-notice-header strong {
-  display: block;
-  font-size: 14px;
-  margin-bottom: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  flex: 1;
+  min-width: 0;
 }
 
-.pbix-notice-header p {
-  margin: 0;
-  font-size: 13px;
+.pbix-details {
+  flex: 0 0 auto;
+}
+
+.pbix-details > summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: #d97706;
+  font-weight: 500;
+  user-select: none;
+  list-style: none;
+}
+
+.pbix-details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.pbix-details > summary::after {
+  content: "▾";
+  margin-left: 4px;
+  display: inline-block;
+  transition: transform 0.15s ease;
+  font-size: 10px;
+}
+
+.pbix-details[open] > summary::after {
+  transform: rotate(180deg);
+}
+
+.pbix-details[open] > summary {
+  margin-bottom: 8px;
+}
+
+.pbix-subtitle {
+  margin: 8px 0 6px;
+  font-size: 12px;
   color: var(--muted);
   line-height: 1.5;
+  flex-basis: 100%;
 }
 
 .pbix-steps {
-  margin: 8px 0 12px 28px;
+  margin: 4px 0 8px 22px;
   padding: 0;
-  font-size: 13px;
+  font-size: 12px;
   color: var(--text);
-  line-height: 1.7;
+  line-height: 1.6;
 }
 
 .pbix-steps li {
-  margin-bottom: 2px;
-}
-
-.pbix-list {
-  /* scroll interno: header/steps/footnote ficam fixos, lista rola */
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  list-style: none;
-  margin: 0;
-  padding: 8px;
-  background: var(--panel-bg, rgba(127, 127, 127, 0.05));
-  border: 1px solid var(--border, rgba(127, 127, 127, 0.12));
-  border-radius: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.pbix-list li {
-  padding: 6px 8px;
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  font-size: 13px;
-}
-
-.pbix-list li strong {
-  color: var(--text);
-  font-weight: 600;
-}
-
-.pbix-list li small {
-  color: var(--muted);
-  font-size: 11px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  flex: 1;
+  margin-bottom: 1px;
 }
 
 .pbix-footnote {
-  margin: 10px 0 0;
+  margin: 6px 0 0;
   font-size: 11px;
   color: var(--muted);
   font-style: italic;

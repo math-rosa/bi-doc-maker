@@ -709,34 +709,24 @@
                   <line x1="12" y1="16" x2="12.01" y2="16"/>
                 </svg>
               </span>
-              <div>
-                <strong id="pbix-notice-title">
-                  {pbixFiles.length === 1
-                    ? $t("pbix.title_one", { n: pbixFiles.length })
-                    : $t("pbix.title_many", { n: pbixFiles.length })}
-                </strong>
-                <p>{$t("pbix.subtitle")}</p>
-              </div>
+              <strong id="pbix-notice-title">
+                {pbixFiles.length === 1
+                  ? $t("pbix.title_one", { n: pbixFiles.length })
+                  : $t("pbix.title_many", { n: pbixFiles.length })}
+              </strong>
+              <details class="pbix-details">
+                <summary>{$t("pbix.how_to_convert")}</summary>
+                <p class="pbix-subtitle">{$t("pbix.subtitle")}</p>
+                <ol class="pbix-steps">
+                  <li>{$t("pbix.step_1")}</li>
+                  <li>{$t("pbix.step_2")}</li>
+                  <li>{$t("pbix.step_3")}</li>
+                  <li>{$t("pbix.step_4")}</li>
+                  <li>{$t("pbix.step_5")}</li>
+                </ol>
+                <p class="pbix-footnote">{$t("pbix.requires_desktop")}</p>
+              </details>
             </header>
-
-            <ol class="pbix-steps">
-              <li>{$t("pbix.step_1")}</li>
-              <li>{$t("pbix.step_2")}</li>
-              <li>{$t("pbix.step_3")}</li>
-              <li>{$t("pbix.step_4")}</li>
-              <li>{$t("pbix.step_5")}</li>
-            </ol>
-
-            <ul class="pbix-list">
-              {#each pbixFiles as f (f.path)}
-                <li>
-                  <strong>{f.name}</strong>
-                  <small title={cleanPath(f.path)}>{relativeProjectPath(f.path)}</small>
-                </li>
-              {/each}
-            </ul>
-
-            <p class="pbix-footnote">{$t("pbix.requires_desktop")}</p>
           </section>
         {/if}
 
