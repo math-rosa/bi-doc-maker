@@ -31,7 +31,7 @@ const MESSAGES = {
     "features.local_title": "Local e Privado",
     "features.local_desc": "Não utiliza IA externa nem APIs para analisar o PBIP. Metadados, regras de negócio e modelo semântico permanecem na sua máquina.",
     "features.auto_title": "Documentação Automática",
-    "features.auto_desc": "Mapeia tabelas, colunas, relacionamentos, medidas DAX, consultas Power Query, páginas e recursos do projeto PBIP.",
+    "features.auto_desc": "Mapeia tabelas, colunas, relacionamentos, medidas DAX, Power Query, calculation groups, perspectivas, RLS/OLS e parâmetros M — direto dos arquivos TMDL do PBIP.",
     "features.quality_title": "Qualidade Executiva",
     "features.quality_desc": "Gere DOCX com visual premium, Markdown técnico e HTML imprimível. Inclui Mermaid, leitura DAX, regras Power Query e dicionário de dados.",
 
@@ -84,7 +84,7 @@ const MESSAGES = {
     "features.local_title": "Local and Private",
     "features.local_desc": "Does not use external AI nor APIs to analyze the PBIP. Metadata, business rules and the semantic model stay on your machine.",
     "features.auto_title": "Automatic Documentation",
-    "features.auto_desc": "Maps tables, columns, relationships, DAX measures, Power Query queries, pages and PBIP project resources.",
+    "features.auto_desc": "Maps tables, columns, relationships, DAX measures, Power Query, calculation groups, perspectives, RLS/OLS and M parameters — straight from the PBIP TMDL files.",
     "features.quality_title": "Executive Quality",
     "features.quality_desc": "Generate premium DOCX, technical Markdown and printable HTML. Includes Mermaid, DAX reading, Power Query rules and a data dictionary.",
 

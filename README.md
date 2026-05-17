@@ -1,5 +1,7 @@
 # BI Doc Maker
 
+> 🇺🇸 [English version](README.en.md)
+
 BI Doc Maker é um aplicativo desktop Windows para gerar documentação técnica e executiva de projetos Power BI salvos no formato `.pbip`.
 
 O produto combina uma interface Tauri + Svelte com um core Python empacotado como sidecar. Toda a análise é feita localmente: o app lê os metadados do PBIP, interpreta o modelo e gera arquivos prontos para entrega, auditoria, governança ou passagem de conhecimento.
@@ -14,7 +16,7 @@ O produto combina uma interface Tauri + Svelte com um core Python empacotado com
 
 ## Recursos
 
-- Análise local de projetos Power BI `.pbip`.
+- Análise local de projetos Power BI `.pbip` (modelo, DAX, Power Query M, relacionamentos, calculation groups, perspectivas e RLS/OLS).
 - **Modo lote**: selecione uma pasta-pai, o app varre subpastas e lista todos os PBIPs encontrados — escolha quais documentar de uma vez só.
 - **Busca/filtro** na lista de projetos por nome ou caminho (essencial quando há muitos PBIPs).
 - **Status em tempo real** durante a geração em lote: cada projeto mostra OK ou erro com tooltip explicando a falha.
@@ -70,8 +72,14 @@ O produto não gera PNG do diagrama. Markdown e HTML mantêm o diagrama Mermaid;
 - Leitura técnica DAX por categoria, como filtros, agregações, relacionamentos, tempo e lógica.
 - Consultas Power Query M, com regra de negócio inferida e código original como evidência técnica.
 - Relacionamentos do modelo.
+- **Grupos de Cálculo** (Calculation Groups) — itens, precedência e format string dinâmica.
+- **Perspectivas** — agrupamentos lógicos de tabelas, colunas e medidas por audiência.
+- **Segurança RLS / OLS** — roles, filtros DAX por tabela, permissões de coluna e membros.
+- **Parâmetros M e expressões compartilhadas** — separados automaticamente, com tipo e valor.
 - Dicionário de dados e termos recorrentes.
 - Recursos de imagem encontrados no projeto.
+
+> Cada uma das seções acima só aparece na documentação quando o PBIP realmente contém o recurso — projetos simples geram documentos limpos, sem placeholders vazios.
 
 ## Comentários BI_DOC
 
