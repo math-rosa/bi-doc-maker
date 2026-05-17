@@ -67,6 +67,17 @@ export const messages: Record<string, string> = {
   "result.empty_title": "Nenhum projeto PBIP encontrado",
   "result.empty_subtitle": "Verifique se a pasta selecionada contém arquivos .pbip ou subpastas com modelos Power BI.",
 
+  // ----- PBIX block (arquivos legados, precisam conversão manual) -----
+  "pbix.title_one": "{n} arquivo .pbix encontrado — precisa converter",
+  "pbix.title_many": "{n} arquivos .pbix encontrados — precisam converter",
+  "pbix.subtitle": "O BI Doc Maker documenta apenas projetos no formato PBIP (folder-based). Para documentar estes arquivos, converta-os primeiro no Power BI Desktop:",
+  "pbix.step_1": "Abra o arquivo no Power BI Desktop",
+  "pbix.step_2": "File → Save As (ou Salvar Como)",
+  "pbix.step_3": "Em \"Salvar como tipo\", escolha \"Power BI Project files (*.pbip)\"",
+  "pbix.step_4": "Salve numa pasta — o Desktop gera o projeto PBIP convertido",
+  "pbix.step_5": "Volte aqui e reselecione a pasta para escanear novamente",
+  "pbix.requires_desktop": "Requer Power BI Desktop com suporte a PBIP (versão de 2024 ou mais recente).",
+
   // ----- Error notice -----
   "notice.error_title": "Erro",
 

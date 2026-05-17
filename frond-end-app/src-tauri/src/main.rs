@@ -32,6 +32,9 @@ const SCAN_SKIP_DIRS: &[&str] = &[
 struct PbipEntry {
     name: String,
     path: String,
+    /// "pbip" para projetos prontos para documentar; "pbix" para arquivos
+    /// que o usuario precisa converter antes via Power BI Desktop.
+    kind: String,
 }
 
 #[tauri::command]
@@ -99,10 +102,13 @@ fn scan_recursive(dir: &Path, depth: usize, results: &mut Vec<PbipEntry>) {
         return;
     }
 
+    // Se a pasta atual e um projeto PBIP, registra e nao recurse mais.
+    // Eventuais .pbix dentro dela sao versoes antigas que ja foram convertidas.
     if let Some(name) = detect_pbip_name(dir) {
         results.push(PbipEntry {
             name,
             path: dir.to_string_lossy().to_string(),
+            kind: "pbip".to_string(),
         });
         return;
     }
@@ -111,12 +117,41 @@ fn scan_recursive(dir: &Path, depth: usize, results: &mut Vec<PbipEntry>) {
         return;
     }
 
-    let reader = match fs::read_dir(dir) {
-        Ok(reader) => reader,
+    let entries: Vec<fs::DirEntry> = match fs::read_dir(dir) {
+        Ok(reader) => reader.flatten().collect(),
         Err(_) => return,
     };
 
-    for entry in reader.flatten() {
+    // Primeira passada: coleta arquivos .pbix soltos nesta pasta.
+    // Sao reportados para o usuario com instrucao de conversao no UI.
+    for entry in &entries {
+        if results.len() >= SCAN_MAX_RESULTS {
+            return;
+        }
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        let ext = match path.extension().and_then(|s| s.to_str()) {
+            Some(e) => e,
+            None => continue,
+        };
+        if !ext.eq_ignore_ascii_case("pbix") {
+            continue;
+        }
+        let stem = match path.file_stem().and_then(|s| s.to_str()) {
+            Some(s) => s.to_string(),
+            None => continue,
+        };
+        results.push(PbipEntry {
+            name: stem,
+            path: path.to_string_lossy().to_string(),
+            kind: "pbix".to_string(),
+        });
+    }
+
+    // Segunda passada: recursao em subpastas.
+    for entry in entries {
         if results.len() >= SCAN_MAX_RESULTS {
             return;
         }

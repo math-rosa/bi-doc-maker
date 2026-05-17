@@ -28,7 +28,9 @@
 
   const PbipEntrySchema = z.object({
     name: z.string(),
-    path: z.string()
+    path: z.string(),
+    // "pbip" = pronto para documentar; "pbix" = precisa converter no Desktop.
+    kind: z.enum(["pbip", "pbix"]).default("pbip")
   });
   const PbipEntryArraySchema = z.array(PbipEntrySchema);
 
@@ -92,8 +94,13 @@
   let updateInfo: UpdateInfo | null = null;
 
   $: activeFormats = outputFormats.filter((format) => selectedFormats[format]);
-  $: selectedProjectsList = projects.filter((p) => selections[p.path]);
-  $: hasProjects = projects.length > 0;
+  // PBIP projects sao os documentaveis; PBIX entram em uma lista separada
+  // com instrucao de conversao manual no Power BI Desktop (alternativa D).
+  $: pbipProjects = projects.filter((p) => p.kind === "pbip");
+  $: pbixFiles = projects.filter((p) => p.kind === "pbix");
+  $: selectedProjectsList = pbipProjects.filter((p) => selections[p.path]);
+  $: hasProjects = pbipProjects.length > 0;
+  $: hasPbixFiles = pbixFiles.length > 0;
   $: hasSelectedProjects = selectedProjectsList.length > 0;
   $: canExport = hasSelectedProjects && activeFormats.length > 0 && !isExporting && !isScanning;
   $: outputPathLabel =
@@ -106,12 +113,12 @@
   );
   $: normalizedQuery = searchQuery.trim().toLowerCase();
   $: filteredProjects = normalizedQuery
-    ? projects.filter(
+    ? pbipProjects.filter(
         (p) =>
           p.name.toLowerCase().includes(normalizedQuery) ||
           p.path.toLowerCase().includes(normalizedQuery)
       )
-    : projects;
+    : pbipProjects;
   $: hasActiveFilter = normalizedQuery.length > 0;
 
   const applyTheme = (mode: ThemeMode) => {
@@ -253,9 +260,13 @@
       const result = await invoke("scan_pbip_projects", { root });
       const parsed = PbipEntryArraySchema.parse(result);
       projects = parsed;
-      selections = Object.fromEntries(parsed.map((p) => [p.path, true]));
-      projectStatus = Object.fromEntries(parsed.map((p) => [p.path, "idle" as ProjectStatus]));
+      // Apenas PBIPs sao selecionaveis para export; PBIX viram aviso informativo.
+      const pbipOnly = parsed.filter((p) => p.kind === "pbip");
+      selections = Object.fromEntries(pbipOnly.map((p) => [p.path, true]));
+      projectStatus = Object.fromEntries(pbipOnly.map((p) => [p.path, "idle" as ProjectStatus]));
       scanCompleted = true;
+      // So mostra erro "nenhum projeto" se NAO encontrou nem PBIP nem PBIX
+      // (se tem PBIX, o usuario ve o bloco com instrucao de conversao).
       if (parsed.length === 0) {
         errorMessage = translate("err.no_projects");
       }
@@ -611,11 +622,11 @@
               <div class="project-count-block">
                 <strong>
                   {#if hasActiveFilter}
-                    {filteredProjects.length} {$locale === "pt-BR" ? "de" : "of"} {projects.length}
+                    {filteredProjects.length} {$locale === "pt-BR" ? "de" : "of"} {pbipProjects.length}
                   {:else}
-                    {projects.length}
+                    {pbipProjects.length}
                   {/if}
-                  {projects.length === 1 ? $t("panel.found_one") : $t("panel.found_many")}
+                  {pbipProjects.length === 1 ? $t("panel.found_one") : $t("panel.found_many")}
                 </strong>
                 <small>{selectedProjectsList.length} {selectedProjectsList.length === 1 ? $t("panel.checked_one") : $t("panel.checked_many")}</small>
               </div>
@@ -638,7 +649,7 @@
                 {/if}
               </div>
               <div class="project-toolbar">
-                {#if projects.length > 1}
+                {#if pbipProjects.length > 1}
                   <button type="button" on:click={selectAllProjects} disabled={isExporting || filteredProjects.length === 0}>{$t("panel.select_all")}</button>
                   <button type="button" on:click={clearSelection} disabled={isExporting || filteredProjects.length === 0}>{$t("panel.clear_selection")}</button>
                 {/if}
@@ -688,7 +699,48 @@
           </section>
         {/if}
 
-        {#if scanCompleted && !hasProjects && !errorMessage && !isScanning}
+        {#if scanCompleted && hasPbixFiles}
+          <section class="pbix-notice" aria-labelledby="pbix-notice-title">
+            <header class="pbix-notice-header">
+              <span class="pbix-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="10"/>
+                  <line x1="12" y1="8" x2="12" y2="12"/>
+                  <line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+              </span>
+              <div>
+                <strong id="pbix-notice-title">
+                  {pbixFiles.length === 1
+                    ? $t("pbix.title_one", { n: pbixFiles.length })
+                    : $t("pbix.title_many", { n: pbixFiles.length })}
+                </strong>
+                <p>{$t("pbix.subtitle")}</p>
+              </div>
+            </header>
+
+            <ol class="pbix-steps">
+              <li>{$t("pbix.step_1")}</li>
+              <li>{$t("pbix.step_2")}</li>
+              <li>{$t("pbix.step_3")}</li>
+              <li>{$t("pbix.step_4")}</li>
+              <li>{$t("pbix.step_5")}</li>
+            </ol>
+
+            <ul class="pbix-list">
+              {#each pbixFiles as f (f.path)}
+                <li>
+                  <strong>{f.name}</strong>
+                  <small title={cleanPath(f.path)}>{relativeProjectPath(f.path)}</small>
+                </li>
+              {/each}
+            </ul>
+
+            <p class="pbix-footnote">{$t("pbix.requires_desktop")}</p>
+          </section>
+        {/if}
+
+        {#if scanCompleted && !hasProjects && !hasPbixFiles && !errorMessage && !isScanning}
           <div class="state-card empty-result">
             <strong>{$t("result.empty_title")}</strong>
             <span>{$t("result.empty_subtitle")}</span>
