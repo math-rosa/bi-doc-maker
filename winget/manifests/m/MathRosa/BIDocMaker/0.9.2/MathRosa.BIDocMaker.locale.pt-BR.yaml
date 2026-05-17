@@ -1,0 +1,23 @@
+PackageIdentifier: MathRosa.BIDocMaker
+PackageVersion: 0.9.2
+PackageLocale: pt-BR
+Publisher: Math Rosa
+PublisherUrl: https://github.com/math-rosa
+PublisherSupportUrl: https://github.com/math-rosa/bi-doc-maker/issues
+Author: Math Rosa
+PackageName: BI Doc Maker
+PackageUrl: https://github.com/math-rosa/bi-doc-maker
+License: MIT
+LicenseUrl: https://github.com/math-rosa/bi-doc-maker/blob/main/LICENSE
+Copyright: Copyright (c) 2026 Math Rosa
+ShortDescription: Gera documentação técnica e executiva de projetos Power BI PBIP localmente.
+Description: |-
+  BI Doc Maker é um aplicativo desktop Windows que lê projetos Power BI no formato PBIP
+  e gera documentação técnica e executiva em Markdown, DOCX e HTML — tudo processado
+  localmente, sem enviar metadados para a nuvem.
+
+  Cobre tabelas, colunas, medidas DAX, Power Query, relacionamentos, grupos de cálculo,
+  perspectivas, RLS/OLS e parâmetros M direto dos arquivos TMDL do PBIP.
+ReleaseNotesUrl: https://github.com/math-rosa/bi-doc-maker/releases/tag/v0.9.2
+ManifestType: locale
+ManifestVersion: 1.6.0

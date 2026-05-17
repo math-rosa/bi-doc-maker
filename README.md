@@ -165,6 +165,14 @@ Para reaproveitar dependências Node já instaladas:
 .\build-windows.ps1 -SkipNpmInstall
 ```
 
+Para dev local rápido (pula o rebuild do bootloader PyInstaller, que exige Visual Studio Build Tools):
+
+```powershell
+.\build-windows.ps1 -FastBuild
+```
+
+> ⚠️ Releases públicas **nunca** devem usar `-FastBuild` — o bootloader stock do PyInstaller é flagrado por vários antivírus heurísticos. O rebuild local muda o hash e elimina essa falsa detecção.
+
 ## Desenvolvimento do App
 
 Instale dependências do front-end:
@@ -231,19 +239,48 @@ O hash da sua cópia local deve bater com o publicado na release.
 
 ### Para mantenedores: reduzindo falsos positivos
 
-O `build-windows.ps1` já aplica algumas mitigações:
+O `build-windows.ps1` já aplica várias mitigações automaticamente:
 
 - `--noupx`: evita o packer UPX (binários UPX-compressed são fortemente flagrados).
 - `--version-file version-info.txt`: embute metadata Windows (CompanyName, FileDescription, etc.) — executáveis sem metadata são considerados suspeitos.
 - `Assert-LastExitCode`: falha rápida em qualquer step quebrado, evitando entregar binário corrompido.
+- **Rebuild automático do bootloader PyInstaller** (executado por padrão pelo `build-windows.ps1`): o bootloader stock distribuído via pip tem hash conhecido por AVs heurísticos. Rebuildando local, o hash muda e o binário deixa de bater com essas assinaturas. Requer Visual Studio Build Tools — se ausente, o build segue com aviso. Para pular o rebuild em dev local, use `-FastBuild`.
 
-Para reduzir AINDA mais os alertas (passo opcional, recomendado antes de release pública):
+#### Submeter como falso positivo aos antivírus principais
+
+Após cada release pública, submeta os dois `.exe` (`documentador-core.exe` e `BI Doc Maker.exe`) aos portais oficiais:
+
+| Vendor | Portal | Tempo médio |
+| --- | --- | --- |
+| **Microsoft Defender** | [microsoft.com/wdsi/filesubmission](https://www.microsoft.com/wdsi/filesubmission) | 3-7 dias |
+| **Avast / AVG** | [avast.com/false-positive-file-form](https://www.avast.com/false-positive-file-form.php) | 1-3 dias |
+| **McAfee** | [mcafee.com/.../contact-research](https://www.mcafee.com/enterprise/en-us/threat-center/contact-research.html) | 5-14 dias |
+| **Kaspersky** | [kaspersky.com/false-positive](https://www.kaspersky.com/false-positive) | 3-7 dias |
+| **Trend Micro** | [success.trendmicro.com/.../1059565](https://success.trendmicro.com/dcx/s/solution/1059565) | 3-10 dias |
+
+Termômetro: suba o `.exe` no [VirusTotal](https://www.virustotal.com) e veja quantos engines flagam antes e depois das submissões.
+
+**Microsoft Defender (passo a passo)**, por ter o maior alcance:
+
+1. Acesse [microsoft.com/wdsi/filesubmission](https://www.microsoft.com/wdsi/filesubmission) e faça login com conta Microsoft.
+2. Em **Submission type**, escolha **Software developer**.
+3. Faça upload do `documentador-core.exe` (extraído do MSI ou do ZIP portátil).
+4. Em **Detection name**, deixe em branco se você não souber qual detecção foi disparada (o Defender descobre).
+5. Em **Definition update version**, deixe em branco.
+6. Em **Additional information**, descreva: "BI Doc Maker é um app open source para documentar projetos Power BI PBIP. Código em [github.com/math-rosa/bi-doc-maker](https://github.com/math-rosa/bi-doc-maker). PyInstaller é usado apenas para empacotar o sidecar Python — não há código malicioso. Solicito reclassificação como clean."
+7. Marque **I believe this file should not be detected as malware**.
+8. Submeta. Você recebe email com o resultado em 3-7 dias úteis.
+9. Repita o upload com `BI Doc Maker.exe` (instalado em `Program Files`).
+
+#### Distribuir via winget (bypass do SmartScreen)
+
+Instalações via `winget install` **não disparam SmartScreen** porque o instalador vem assinado pelo Microsoft Store. Manifestos prontos ficam em [`winget/`](winget/). Veja [`winget/README.md`](winget/README.md) para o processo de submissão a `microsoft/winget-pkgs`.
+
+Após aprovação, usuários instalam com:
 
 ```powershell
-.\rebuild-pyinstaller.ps1
+winget install MathRosa.BIDocMaker
 ```
-
-Este script rebuilda o **bootloader do PyInstaller a partir do código-fonte**. O bootloader stock (distribuído via pip) tem hash conhecido por vários AVs heurísticos. Rebuildando localmente, o hash muda e o binário deixa de bater com essas assinaturas. Requer Visual Studio Build Tools instalado.
 
 Para assinar o sidecar e o MSI com certificado Authenticode (quando disponível):
 

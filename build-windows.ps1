@@ -7,7 +7,11 @@ param(
     # URL do servidor de timestamp RFC 3161 (gratuitos: sectigo, digicert, globalsign).
     [string]$TimestampUrl = "http://timestamp.sectigo.com",
     # Pula a geração do ZIP portatil (so MSI).
-    [switch]$SkipPortable
+    [switch]$SkipPortable,
+    # Pula o rebuild do bootloader PyInstaller. Default = tenta rebuildar
+    # (reduz falsos positivos de AV). Para dev local rapido, use -FastBuild.
+    # Releases publicas NUNCA devem usar -FastBuild.
+    [switch]$FastBuild
 )
 
 $ErrorActionPreference = "Stop"
@@ -90,6 +94,39 @@ Write-Host "==> Instalando dependencias Python"
 Assert-LastExitCode "Upgrade do pip"
 & $VenvPython -m pip install -r (Join-Path $Root "requirements.txt") pyinstaller
 Assert-LastExitCode "Instalacao de dependencias Python"
+
+# Rebuild do bootloader PyInstaller a partir do source. O bootloader stock
+# tem hash conhecido por AVs heuristicos (Avast/McAfee/Trend Micro) que
+# assumem PyInstaller = malware Python. Rebuild local muda o hash e zera
+# essa heuristica. Best-effort: se Visual Studio Build Tools nao estiver
+# instalado, segue com o stock e avisa.
+if ($FastBuild) {
+    Write-Host "==> [FastBuild] Pulando rebuild do bootloader PyInstaller."
+    Write-Host "    AVISO: nao use -FastBuild para releases publicas."
+}
+else {
+    $RebuildScript = Join-Path $Root "rebuild-pyinstaller.ps1"
+    if (Test-Path $RebuildScript) {
+        Write-Host "==> Rebuildando bootloader PyInstaller (anti falso positivo de AV)"
+        try {
+            & $RebuildScript -VenvDir ".product-venv"
+            if ($LASTEXITCODE -ne 0) {
+                throw "rebuild-pyinstaller.ps1 retornou codigo $LASTEXITCODE"
+            }
+        }
+        catch {
+            Write-Host ""
+            Write-Host "    [AVISO] Rebuild do bootloader PyInstaller falhou: $_" -ForegroundColor Yellow
+            Write-Host "    Continuando com bootloader stock — AVs podem flagar mais." -ForegroundColor Yellow
+            Write-Host "    Causa provavel: Visual Studio Build Tools nao instalado." -ForegroundColor Yellow
+            Write-Host "    Para releases publicas, instale Build Tools com workload C++." -ForegroundColor Yellow
+            Write-Host ""
+        }
+    }
+    else {
+        Write-Host "    [AVISO] $RebuildScript nao encontrado; usando bootloader stock"
+    }
+}
 
 Write-Host "==> Gerando sidecar Python com PyInstaller"
 $PyInstallerArgs = @(
