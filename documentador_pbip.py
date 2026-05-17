@@ -2428,11 +2428,25 @@ def parse_tmdl_table(caminho: str) -> Optional[InfoTabela]:
 _TMDL_DESCRIPTION_RE = re.compile(r"^\s*///\s?(.*)$")
 
 
+# Largura de tab usada para normalizar indentacao TMDL. O serializer oficial
+# da Microsoft usa 1 tab por nivel; ferramentas terceiras (Tabular Editor,
+# scripts) podem produzir tabs ou espacos. Normalizamos via expandtabs para
+# garantir que `\t` (1 nivel) e `    ` (4 espacos) virem o mesmo indent.
+_TMDL_TAB_WIDTH = 4
+
+
 def _tmdl_indent(linha: str) -> int:
-    """Conta a indentacao da linha (tabs contam como 1; espacos como 1 cada)."""
+    """Conta a indentacao da linha em colunas (tabs expandidos para _TMDL_TAB_WIDTH).
+
+    Sem essa normalizacao, um arquivo com mistura tabs+espacos (Tabular
+    Editor escreve `\\t`, ediçao manual no VSCode pode trocar por 4 espacos)
+    quebra a deteccao de hierarquia: `\\tperspectiveColumn` (indent=1) virava
+    "irmao" de `    perspectiveTable` (indent=4) em vez de filho.
+    """
+    expandida = linha.expandtabs(_TMDL_TAB_WIDTH)
     n = 0
-    for ch in linha:
-        if ch == '\t' or ch == ' ':
+    for ch in expandida:
+        if ch == ' ':
             n += 1
         else:
             break
@@ -2931,7 +2945,11 @@ def parse_tmdl_calculation_group(caminho_tabela: str) -> Optional[InfoCalculatio
                     expressao_dax="\n".join(dax_pedacos).strip(),
                     formato_dinamico=fmt_def,
                     ordinal=ordinal,
-                    descricao=_tmdl_descricao_antes(bloco, i) if False else None,
+                    # Descricao por calculationItem: o TMDL nao costuma usar
+                    # `///` em items individuais (so na table que os contem),
+                    # entao deixamos None — se aparecer no futuro, basta usar
+                    # _tmdl_descricao_antes(bloco, i) aqui.
+                    descricao=None,
                 ))
                 i = prox
                 continue
@@ -5039,6 +5057,64 @@ class DocumentadorPBIP:
                     lines.append("")
         return lines
 
+    @staticmethod
+    def _resumo_valor_parametro(ne: 'InfoNamedExpression', limite: int = 60) -> str:
+        """Extrai o valor "limpo" de um parametro M para exibicao em tabela.
+
+        Remove o bloco `meta [...]` (que pode ter aspas, colchetes literais,
+        comentarios, multilinha), pega so a primeira linha do valor e
+        trunca se passar do limite. Usado em MD e DOCX renderers.
+
+        Implementacao: regex `meta\\s*\\[.*?\\]` non-greedy quebra quando o
+        valor literal contem `]`. Em vez disso fazemos balanceamento manual
+        de colchetes, encontrando o `meta` mais externo a partir do fim.
+        """
+        completa = (ne.expressao or "").strip()
+        if not completa:
+            return "—"
+
+        # Procura "meta" como token isolado (whitespace antes do `[`), do fim
+        # para o comeco, e tenta balancear `[`/`]` a partir do `[` que segue.
+        # Aceita quebras de linha entre `meta` e `[`.
+        sem_meta = completa
+        for m in reversed(list(re.finditer(r"\bmeta\b", completa))):
+            # Pula whitespace ate o proximo `[`
+            j = m.end()
+            while j < len(completa) and completa[j] in " \t\r\n":
+                j += 1
+            if j >= len(completa) or completa[j] != '[':
+                continue
+            # Balanceia colchetes (cuidando de strings literais entre aspas duplas)
+            depth = 0
+            k = j
+            dentro_str = False
+            while k < len(completa):
+                ch = completa[k]
+                if ch == '"' and (k == 0 or completa[k - 1] != '\\'):
+                    dentro_str = not dentro_str
+                elif not dentro_str:
+                    if ch == '[':
+                        depth += 1
+                    elif ch == ']':
+                        depth -= 1
+                        if depth == 0:
+                            # So strip se o que sobra apos o `]` e whitespace
+                            # ou nada. Se houver codigo significativo, mantem
+                            # (pode ser outro `meta` mais externo).
+                            resto = completa[k + 1:].strip()
+                            if not resto:
+                                sem_meta = completa[:m.start()].rstrip()
+                            break
+                k += 1
+            if sem_meta != completa:
+                break
+
+        primeira = sem_meta.splitlines()[0].strip() if sem_meta else ""
+        valor = primeira or "—"
+        if len(valor) > limite:
+            valor = valor[: limite - 3] + "..."
+        return valor
+
     def _md_named_expressions(self) -> List[str]:
         """🔧 Parâmetros e Expressões M — parametros e queries compartilhadas."""
         if not self.named_expressions:
@@ -5060,18 +5136,11 @@ class DocumentadorPBIP:
             )
             lines.append("|---|---|---|---|---|")
             for ne in params:
-                # O parametro pode ser multilinha (`"valor" meta [\n  IsParameterQuery=true,\n  ...]`)
-                # entao limpamos `meta [...]` no texto completo (com DOTALL) e
-                # so depois pegamos a primeira linha + truncamos.
-                completa = (ne.expressao or "")
-                sem_meta = re.sub(r"\s*meta\s*\[.*?\]\s*$", "", completa, flags=re.DOTALL).strip()
-                valor_resumo = (sem_meta.splitlines()[0].strip() if sem_meta else "") or "—"
-                if len(valor_resumo) > 60:
-                    valor_resumo = valor_resumo[:57] + "..."
+                valor_resumo = self._resumo_valor_parametro(ne)
                 tipo = f"`{ne.tipo_parametro}`" if ne.tipo_parametro else "—"
                 obrig = "✅" if ne.obrigatorio else "—"
                 grupo = f"`{ne.grupo_consulta}`" if ne.grupo_consulta else "—"
-                lines.append(f"| `{ne.nome}` | {tipo} | {obrig} | {valor_resumo or '—'} | {grupo} |")
+                lines.append(f"| `{ne.nome}` | {tipo} | {obrig} | {valor_resumo} | {grupo} |")
             lines.append("")
 
         if outros:
@@ -6522,11 +6591,7 @@ class DocumentadorPBIP:
                 doc.add_heading(_t("named_expressions.params_heading"), level=2)
                 rows_p = []
                 for ne in params:
-                    completa = (ne.expressao or "")
-                    sem_meta = re.sub(r"\s*meta\s*\[.*?\]\s*$", "", completa, flags=re.DOTALL).strip()
-                    valor = (sem_meta.splitlines()[0].strip() if sem_meta else "") or "—"
-                    if len(valor) > 60:
-                        valor = valor[:57] + "..."
+                    valor = self._resumo_valor_parametro(ne)
                     rows_p.append([
                         ne.nome,
                         ne.tipo_parametro or "—",

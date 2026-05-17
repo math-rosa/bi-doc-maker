@@ -107,6 +107,27 @@ $PyInstallerArgs = @(
 if (Test-Path $VersionInfo) {
     Write-Host "    (usando metadados de $VersionInfo)"
     $PyInstallerArgs += @("--version-file", $VersionInfo)
+
+    # Sanity check: version-info.txt deve bater com tauri.conf.json. Drift
+    # silencioso (ja aconteceu na v0.9.0) faz o sidecar.exe sair com versao
+    # antiga embutida, confundindo telemetria e atenuando o argumento
+    # anti-falso-positivo de antivirus ("metadata coerente = menos suspeito").
+    $TauriConfPath = Join-Path $TauriDir "src-tauri\tauri.conf.json"
+    if (Test-Path $TauriConfPath) {
+        try {
+            $TauriVersion = (Get-Content $TauriConfPath -Raw | ConvertFrom-Json).package.version
+            $InfoText = Get-Content $VersionInfo -Raw
+            if ($InfoText -notmatch [regex]::Escape("u'$TauriVersion'")) {
+                throw "version-info.txt nao bate com tauri.conf.json (esperado '$TauriVersion'). Atualize filevers/prodvers/FileVersion/ProductVersion."
+            }
+        }
+        catch [System.Management.Automation.RuntimeException] {
+            throw
+        }
+        catch {
+            Write-Host "    [AVISO] Nao foi possivel validar versao em $VersionInfo : $_"
+        }
+    }
 }
 else {
     Write-Host "    [AVISO] version-info.txt nao encontrado; sidecar saira sem metadados"
