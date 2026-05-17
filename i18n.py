@@ -198,7 +198,7 @@ _PT_BR: Dict[str, str] = {
     "rel.col.to": "Destino",
     "rel.col.bidirectional": "Bidirecional",
     "rel.col.active": "Ativo",
-    "rel.legend": "*Legenda: `}|--||` = Filtro Bidirecional | `}o--||` = Filtro Único*",
+    "rel.legend": "**Como ler o diagrama:**\n\n- `}|` ou `}o` = lado **\"muitos\"** da relação (vários registros)\n- `||` = lado **\"um\"** da relação (registro único)\n- `}|--||` = **Filtro Bidirecional** — ambas as tabelas se filtram mutuamente\n- `}o--||` = **Filtro Único** — só a dimensão filtra a fato (direção padrão)",
 
     # -------------------------------------------------------------------
     # Resumo das tabelas
@@ -623,7 +623,7 @@ _EN_US: Dict[str, str] = {
     "rel.col.to": "Target",
     "rel.col.bidirectional": "Bidirectional",
     "rel.col.active": "Active",
-    "rel.legend": "*Legend: `}|--||` = Bidirectional Filter | `}o--||` = Single Filter*",
+    "rel.legend": "**How to read the diagram:**\n\n- `}|` or `}o` = **\"many\"** side of the relationship (multiple records)\n- `||` = **\"one\"** side of the relationship (single record)\n- `}|--||` = **Bidirectional Filter** — both tables filter each other\n- `}o--||` = **Single Filter** — only the dimension filters the fact (default direction)",
 
     # -------------------------------------------------------------------
     # Tables summary
