@@ -147,7 +147,11 @@ try {
     try {
         if (-not $SkipNpmInstall) {
             Write-Host "==> Instalando dependencias Node"
-            npm.cmd ci
+            # Usamos `npm install` em vez de `npm ci` porque `ci` apaga
+            # node_modules antes de reinstalar — isso falha com EPERM quando
+            # binarios nativos (.node) estao com handle aberto por Defender/
+            # OneDrive. `install` faz unlink incremental (mais tolerante a lock).
+            npm.cmd install
             $NpmCiCode = $LASTEXITCODE
         }
         else {
@@ -162,7 +166,7 @@ try {
         $ErrorActionPreference = $PrevEAP
     }
 
-    if ($NpmCiCode -ne 0) { throw "npm ci falhou (codigo $NpmCiCode)." }
+    if ($NpmCiCode -ne 0) { throw "npm install falhou (codigo $NpmCiCode)." }
     if ($TauriBuildCode -ne 0) { throw "npm run tauri:build falhou (codigo $TauriBuildCode)." }
 }
 finally {
