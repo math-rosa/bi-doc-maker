@@ -89,6 +89,94 @@ class InfoTabela:
 
 
 @dataclass
+class InfoCalculationItem:
+    """Item individual dentro de um Calculation Group."""
+    nome: str
+    expressao_dax: str
+    formato_dinamico: Optional[str] = None
+    ordinal: Optional[int] = None
+    descricao: Optional[str] = None
+
+
+@dataclass
+class InfoCalculationGroup:
+    """Calculation Group — tabela especial com itens calculados.
+
+    Detectado estruturalmente: uma tabela TMDL com bloco `calculationGroup`.
+    """
+    nome_tabela: str
+    precedencia: int = 0
+    coluna_descritor: Optional[str] = None
+    descricao: Optional[str] = None
+    itens: List[InfoCalculationItem] = field(default_factory=list)
+
+
+@dataclass
+class InfoPerspectivaTabela:
+    """Referencia de tabela dentro de uma perspectiva.
+
+    `tabela_inteira=True` quando o TMDL declara `perspectiveTable X` sem
+    filhos (`perspectiveColumn`/`perspectiveMeasure`/`perspectiveHierarchy`)
+    — significa que a tabela inteira esta na perspectiva.
+    """
+    nome: str
+    tabela_inteira: bool = False
+    colunas: List[str] = field(default_factory=list)
+    medidas: List[str] = field(default_factory=list)
+    hierarquias: List[str] = field(default_factory=list)
+
+
+@dataclass
+class InfoPerspectiva:
+    """Perspectiva — agrupamento logico de objetos do modelo."""
+    nome: str
+    descricao: Optional[str] = None
+    tabelas: List[InfoPerspectivaTabela] = field(default_factory=list)
+
+
+@dataclass
+class InfoColunaPermissao:
+    """OLS: permissao especifica de uma coluna dentro de uma table permission."""
+    nome: str
+    permissao: str  # "none" | "read"
+
+
+@dataclass
+class InfoTablePermission:
+    """Permissao de tabela dentro de um Role (RLS + OLS combinados)."""
+    nome_tabela: str
+    filtro_dax: Optional[str] = None  # RLS — None = sem restricao de linha
+    metadata_permission: Optional[str] = None  # OLS — "none" | "read"
+    colunas_permissao: List[InfoColunaPermissao] = field(default_factory=list)
+
+
+@dataclass
+class InfoRole:
+    """Role de seguranca (RLS) + OLS opcional."""
+    nome: str
+    descricao: Optional[str] = None
+    model_permission: str = "read"  # none|read|readRefresh|refresh|administrator
+    table_permissions: List[InfoTablePermission] = field(default_factory=list)
+    membros: List[str] = field(default_factory=list)
+
+
+@dataclass
+class InfoNamedExpression:
+    """Named expression — parametro M ou query/funcao compartilhada do modelo.
+
+    `eh_parametro=True` quando o TMDL traz `meta [IsParameterQuery=true, ...]`
+    no valor — esse e o marcador oficial de parametro do Power Query.
+    """
+    nome: str
+    expressao: str
+    descricao: Optional[str] = None
+    grupo_consulta: Optional[str] = None
+    eh_parametro: bool = False
+    tipo_parametro: Optional[str] = None  # Text, Number, Logical, ... (se eh_parametro)
+    obrigatorio: bool = False
+
+
+@dataclass
 class InfoRelacionamento:
     """Informações de um relacionamento entre tabelas"""
     id: str
@@ -2329,6 +2417,536 @@ def parse_tmdl_table(caminho: str) -> Optional[InfoTabela]:
 
 
 # ============================================================================
+# PARSERS TMDL — features v0.9.0 (RLS/OLS, Calc Groups, Perspectives, M Params)
+# ============================================================================
+# Todos defensivos: arquivos/pastas ausentes => []. Erros => log + [].
+# Regra: "if exists, document; else, skip silently."
+# Sintaxe TMDL: indentacao define hierarquia (tab ou espacos consistentes);
+# nomes podem vir com 'aspas simples' opcionais; ':' para propriedades,
+# '=' para expressao default; '///' acima do objeto = description.
+
+_TMDL_DESCRIPTION_RE = re.compile(r"^\s*///\s?(.*)$")
+
+
+def _tmdl_indent(linha: str) -> int:
+    """Conta a indentacao da linha (tabs contam como 1; espacos como 1 cada)."""
+    n = 0
+    for ch in linha:
+        if ch == '\t' or ch == ' ':
+            n += 1
+        else:
+            break
+    return n
+
+
+def _tmdl_ler_arquivo(caminho: str) -> List[str]:
+    """Le linhas preservando indentacao; retorna [] em erro."""
+    if not arquivo_existe(caminho):
+        return []
+    try:
+        with open(caminho, 'r', encoding='utf-8-sig') as f:
+            return f.read().splitlines()
+    except Exception as e:
+        print(f"  [AVISO] Erro ao ler {caminho}: {e}")
+        return []
+
+
+def _tmdl_coletar_bloco(linhas: List[str], inicio: int, indent_pai: int) -> Tuple[List[str], int]:
+    """Coleta linhas com indent > indent_pai a partir de `inicio+1`.
+
+    Retorna (bloco, indice_logo_apos). Bloco preserva indentacao relativa.
+    Para na primeira linha nao-vazia com indent <= indent_pai.
+    """
+    bloco: List[str] = []
+    j = inicio + 1
+    while j < len(linhas):
+        linha = linhas[j]
+        if linha.strip() == "":
+            bloco.append(linha)
+            j += 1
+            continue
+        if _tmdl_indent(linha) <= indent_pai:
+            break
+        bloco.append(linha)
+        j += 1
+    return bloco, j
+
+
+def _tmdl_descricao_antes(linhas: List[str], idx: int) -> Optional[str]:
+    """Coleta `///` consecutivas imediatamente acima de `idx`."""
+    partes: List[str] = []
+    k = idx - 1
+    while k >= 0:
+        linha = linhas[k]
+        if linha.strip() == "":
+            break
+        m = _TMDL_DESCRIPTION_RE.match(linha)
+        if not m:
+            break
+        partes.append(m.group(1).strip())
+        k -= 1
+    if not partes:
+        return None
+    partes.reverse()
+    return "\n".join(p for p in partes if p) or None
+
+
+# ----------------------------------------------------------------------------
+# Perspectives
+# ----------------------------------------------------------------------------
+
+def parse_tmdl_perspective(caminho: str) -> Optional[InfoPerspectiva]:
+    """Parseia um arquivo de perspectiva: definition/perspectives/<X>.tmdl.
+
+    Sintaxe:
+        /// description opcional
+        perspective <Nome>
+            lineageTag: ...
+            perspectiveTable '<Tabela>'      # sem filhos => tabela inteira
+                perspectiveColumn '<Coluna>'
+                perspectiveMeasure '<Medida>'
+                perspectiveHierarchy '<Hier>'
+    """
+    linhas = _tmdl_ler_arquivo(caminho)
+    if not linhas:
+        return None
+
+    try:
+        # Linha de declaracao da perspectiva
+        idx_decl = None
+        nome = None
+        for i, linha in enumerate(linhas):
+            m = re.match(r"^\s*perspective\s+['\"]?(.+?)['\"]?\s*$", linha)
+            if m:
+                idx_decl = i
+                nome = limpar_nome(m.group(1))
+                break
+        if not nome or idx_decl is None:
+            return None
+
+        persp = InfoPerspectiva(nome=nome)
+        persp.descricao = _tmdl_descricao_antes(linhas, idx_decl)
+
+        indent_persp = _tmdl_indent(linhas[idx_decl])
+        bloco, _ = _tmdl_coletar_bloco(linhas, idx_decl, indent_persp)
+
+        # Processa o bloco da perspectiva — perspectiveTable e seus filhos
+        i = 0
+        while i < len(bloco):
+            linha = bloco[i]
+            stripped = linha.strip()
+            m_tab = re.match(r"^perspectiveTable\s+['\"]?(.+?)['\"]?\s*$", stripped)
+            if m_tab:
+                ref_tab = InfoPerspectivaTabela(nome=limpar_nome(m_tab.group(1)))
+                indent_tab = _tmdl_indent(linha)
+                # Coleta filhos da tabela
+                sub_bloco, prox = _tmdl_coletar_bloco(bloco, i, indent_tab)
+                for sub in sub_bloco:
+                    sub_s = sub.strip()
+                    m_col = re.match(r"^perspectiveColumn\s+['\"]?(.+?)['\"]?\s*$", sub_s)
+                    m_med = re.match(r"^perspectiveMeasure\s+['\"]?(.+?)['\"]?\s*$", sub_s)
+                    m_hier = re.match(r"^perspectiveHierarchy\s+['\"]?(.+?)['\"]?\s*$", sub_s)
+                    if m_col:
+                        ref_tab.colunas.append(limpar_nome(m_col.group(1)))
+                    elif m_med:
+                        ref_tab.medidas.append(limpar_nome(m_med.group(1)))
+                    elif m_hier:
+                        ref_tab.hierarquias.append(limpar_nome(m_hier.group(1)))
+                if not (ref_tab.colunas or ref_tab.medidas or ref_tab.hierarquias):
+                    ref_tab.tabela_inteira = True
+                persp.tabelas.append(ref_tab)
+                i = prox
+            else:
+                i += 1
+
+        return persp
+    except Exception as e:
+        print(f"  [AVISO] Falha ao parsear perspectiva {caminho}: {e}")
+        return None
+
+
+def parse_tmdl_perspectives_dir(pasta: str) -> List[InfoPerspectiva]:
+    """Coleta perspectivas de `definition/perspectives/*.tmdl`. [] se ausente."""
+    if not os.path.isdir(pasta):
+        return []
+    resultado: List[InfoPerspectiva] = []
+    try:
+        arquivos = sorted(p for p in os.listdir(pasta) if p.lower().endswith(".tmdl"))
+    except Exception as e:
+        print(f"  [AVISO] Falha ao listar {pasta}: {e}")
+        return []
+    for nome_arq in arquivos:
+        persp = parse_tmdl_perspective(os.path.join(pasta, nome_arq))
+        if persp:
+            resultado.append(persp)
+    return resultado
+
+
+# ----------------------------------------------------------------------------
+# Roles (RLS + OLS)
+# ----------------------------------------------------------------------------
+
+def parse_tmdl_role(caminho: str) -> Optional[InfoRole]:
+    """Parseia um arquivo de role: definition/roles/<X>.tmdl.
+
+    Sintaxe:
+        /// description opcional
+        role '<Nome>'
+            modelPermission: read
+            tablePermission '<T>' = <DAX>         # RLS (filtro por linha)
+            tablePermission '<T>'                  # OLS-only
+                metadataPermission: read|none
+                columnPermission '<C>' = none|read
+            member <principal>
+    """
+    linhas = _tmdl_ler_arquivo(caminho)
+    if not linhas:
+        return None
+
+    try:
+        idx_decl = None
+        nome = None
+        for i, linha in enumerate(linhas):
+            m = re.match(r"^\s*role\s+['\"]?(.+?)['\"]?\s*$", linha)
+            if m:
+                idx_decl = i
+                nome = limpar_nome(m.group(1))
+                break
+        if not nome or idx_decl is None:
+            return None
+
+        role = InfoRole(nome=nome)
+        role.descricao = _tmdl_descricao_antes(linhas, idx_decl)
+
+        indent_role = _tmdl_indent(linhas[idx_decl])
+        bloco, _ = _tmdl_coletar_bloco(linhas, idx_decl, indent_role)
+
+        i = 0
+        while i < len(bloco):
+            linha = bloco[i]
+            stripped = linha.strip()
+
+            m_mp = re.match(r"^modelPermission\s*:\s*(\S+)", stripped)
+            if m_mp:
+                role.model_permission = m_mp.group(1).strip()
+                i += 1
+                continue
+
+            # tablePermission <Tabela> = <DAX>   (RLS)
+            # tablePermission <Tabela>            (OLS / sem filtro)
+            m_tp_eq = re.match(r"^tablePermission\s+['\"]?(.+?)['\"]?\s*=\s*(.*)$", stripped)
+            m_tp_only = re.match(r"^tablePermission\s+['\"]?(.+?)['\"]?\s*$", stripped)
+            if m_tp_eq or m_tp_only:
+                indent_tp = _tmdl_indent(linha)
+                if m_tp_eq:
+                    nome_tab = limpar_nome(m_tp_eq.group(1))
+                    primeiro_pedaco = m_tp_eq.group(2).strip()
+                else:
+                    nome_tab = limpar_nome(m_tp_only.group(1))
+                    primeiro_pedaco = ""
+
+                tp = InfoTablePermission(nome_tabela=nome_tab)
+                sub_bloco, prox = _tmdl_coletar_bloco(bloco, i, indent_tp)
+
+                # Filtro DAX multilinha: o `=` pode ter so o inicio na linha do
+                # tablePermission e continuar mais indentado abaixo. Coletamos
+                # linhas indentadas que NAO sejam propriedades conhecidas (`:`)
+                # nem `columnPermission`.
+                if m_tp_eq:
+                    pedacos_dax = [primeiro_pedaco] if primeiro_pedaco else []
+                    consumidos_dax = 0
+                    for sub in sub_bloco:
+                        sub_s = sub.strip()
+                        if not sub_s:
+                            consumidos_dax += 1
+                            continue
+                        if (sub_s.startswith(('metadataPermission', 'columnPermission',
+                                              'annotation', 'lineageTag'))):
+                            break
+                        pedacos_dax.append(sub_s)
+                        consumidos_dax += 1
+                    tp.filtro_dax = "\n".join(pedacos_dax).strip() or None
+                    sub_bloco = sub_bloco[consumidos_dax:]
+
+                # Propriedades de OLS
+                for sub in sub_bloco:
+                    sub_s = sub.strip()
+                    m_meta = re.match(r"^metadataPermission\s*:\s*(\S+)", sub_s)
+                    m_cp_eq = re.match(r"^columnPermission\s+['\"]?(.+?)['\"]?\s*=\s*(\S+)", sub_s)
+                    if m_meta:
+                        tp.metadata_permission = m_meta.group(1).strip()
+                    elif m_cp_eq:
+                        tp.colunas_permissao.append(InfoColunaPermissao(
+                            nome=limpar_nome(m_cp_eq.group(1)),
+                            permissao=m_cp_eq.group(2).strip(),
+                        ))
+
+                role.table_permissions.append(tp)
+                i = prox
+                continue
+
+            m_member = re.match(r"^member\s+(.+)$", stripped)
+            if m_member:
+                role.membros.append(m_member.group(1).strip())
+                i += 1
+                continue
+
+            i += 1
+
+        return role
+    except Exception as e:
+        print(f"  [AVISO] Falha ao parsear role {caminho}: {e}")
+        return None
+
+
+def parse_tmdl_roles_dir(pasta: str) -> List[InfoRole]:
+    """Coleta roles de `definition/roles/*.tmdl`. [] se ausente."""
+    if not os.path.isdir(pasta):
+        return []
+    resultado: List[InfoRole] = []
+    try:
+        arquivos = sorted(p for p in os.listdir(pasta) if p.lower().endswith(".tmdl"))
+    except Exception as e:
+        print(f"  [AVISO] Falha ao listar {pasta}: {e}")
+        return []
+    for nome_arq in arquivos:
+        role = parse_tmdl_role(os.path.join(pasta, nome_arq))
+        if role:
+            resultado.append(role)
+    return resultado
+
+
+# ----------------------------------------------------------------------------
+# Named Expressions (parametros M + queries compartilhadas)
+# ----------------------------------------------------------------------------
+
+# Detecta o marcador oficial de parametro do Power Query.
+_META_PARAM_RE = re.compile(r"\bIsParameterQuery\s*=\s*true", re.IGNORECASE)
+_META_TYPE_RE = re.compile(r"\bType\s*=\s*\"?([^,\"\]]+?)\"?\s*[,\]]", re.IGNORECASE)
+_META_REQUIRED_RE = re.compile(r"\bIsParameterQueryRequired\s*=\s*true", re.IGNORECASE)
+
+
+def parse_tmdl_expressions(caminho: str) -> List[InfoNamedExpression]:
+    """Parseia `definition/expressions.tmdl` (arquivo unico do modelo).
+
+    Sintaxe:
+        /// description opcional
+        expression <Nome> = "valor" meta [IsParameterQuery=true, Type="Text", ...]
+            lineageTag: ...
+            queryGroup: <Grupo>
+
+        expression <Nome> =
+            let
+                Source = ...
+            in
+                Source
+            queryGroup: <Grupo>
+    """
+    linhas = _tmdl_ler_arquivo(caminho)
+    if not linhas:
+        return []
+
+    resultado: List[InfoNamedExpression] = []
+    try:
+        i = 0
+        while i < len(linhas):
+            linha = linhas[i]
+            stripped = linha.strip()
+
+            # Captura `expression <Nome>` ou `expression <Nome> = ...`
+            m = re.match(
+                r"^expression\s+['\"]?(.+?)['\"]?\s*(=\s*(.*))?$",
+                stripped,
+            )
+            if not m or _tmdl_indent(linha) != 0:
+                # Named expressions sao sempre no nivel raiz do expressions.tmdl
+                i += 1
+                continue
+
+            nome = limpar_nome(m.group(1))
+            primeiro_valor = (m.group(3) or "").strip()
+
+            indent_expr = _tmdl_indent(linha)
+            bloco, prox = _tmdl_coletar_bloco(linhas, i, indent_expr)
+
+            # Separa propriedades conhecidas do corpo da expressao
+            corpo_pedacos: List[str] = []
+            if primeiro_valor:
+                corpo_pedacos.append(primeiro_valor)
+            grupo: Optional[str] = None
+            for sub in bloco:
+                sub_s = sub.strip()
+                if not sub_s:
+                    corpo_pedacos.append("")
+                    continue
+                m_qg = re.match(r"^queryGroup\s*:\s*(.+)$", sub_s)
+                m_lt = re.match(r"^lineageTag\s*:\s*(.+)$", sub_s)
+                m_ann = re.match(r"^annotation\s+", sub_s)
+                if m_qg:
+                    grupo = limpar_nome(m_qg.group(1).strip())
+                elif m_lt or m_ann:
+                    continue
+                else:
+                    corpo_pedacos.append(sub_s)
+
+            corpo = "\n".join(corpo_pedacos).strip()
+
+            # Detecta `meta [IsParameterQuery=true, ...]` em qualquer lugar do corpo
+            eh_param = bool(_META_PARAM_RE.search(corpo))
+            tipo_param: Optional[str] = None
+            obrig = False
+            if eh_param:
+                m_type = _META_TYPE_RE.search(corpo)
+                if m_type:
+                    tipo_param = m_type.group(1).strip()
+                obrig = bool(_META_REQUIRED_RE.search(corpo))
+
+            ne = InfoNamedExpression(
+                nome=nome,
+                expressao=corpo,
+                descricao=_tmdl_descricao_antes(linhas, i),
+                grupo_consulta=grupo,
+                eh_parametro=eh_param,
+                tipo_parametro=tipo_param,
+                obrigatorio=obrig,
+            )
+            resultado.append(ne)
+            i = prox
+    except Exception as e:
+        print(f"  [AVISO] Falha ao parsear expressions.tmdl: {e}")
+        return resultado
+
+    return resultado
+
+
+# ----------------------------------------------------------------------------
+# Calculation Groups — detectados estruturalmente dentro de arquivos de tabela
+# ----------------------------------------------------------------------------
+
+def parse_tmdl_calculation_group(caminho_tabela: str) -> Optional[InfoCalculationGroup]:
+    """Se a tabela e um Calculation Group, retorna InfoCalculationGroup.
+
+    Detectado pela presenca do bloco `calculationGroup` dentro da `table`.
+    Senao, retorna None (tabela comum, ja processada por parse_tmdl_table).
+    """
+    linhas = _tmdl_ler_arquivo(caminho_tabela)
+    if not linhas:
+        return None
+
+    try:
+        # Captura nome da tabela
+        nome_tab = None
+        idx_tab = None
+        for i, linha in enumerate(linhas[:20]):
+            m = re.match(r"^table\s+['\"]?(.+?)['\"]?\s*$", linha.strip())
+            if m and _tmdl_indent(linha) == 0:
+                nome_tab = limpar_nome(m.group(1))
+                idx_tab = i
+                break
+        if not nome_tab or idx_tab is None:
+            return None
+
+        # Procura o bloco `calculationGroup` (filho direto da table)
+        idx_cg = None
+        for i in range(idx_tab + 1, len(linhas)):
+            linha = linhas[i]
+            if linha.strip() == "":
+                continue
+            if _tmdl_indent(linha) == 0:
+                break  # acabou a table
+            if linha.strip().startswith("calculationGroup"):
+                idx_cg = i
+                break
+
+        if idx_cg is None:
+            return None  # tabela normal
+
+        cg = InfoCalculationGroup(nome_tabela=nome_tab)
+        cg.descricao = _tmdl_descricao_antes(linhas, idx_tab)
+
+        indent_cg = _tmdl_indent(linhas[idx_cg])
+        bloco, _ = _tmdl_coletar_bloco(linhas, idx_cg, indent_cg)
+
+        # Coleta `precedence` e os `calculationItem`s
+        i = 0
+        while i < len(bloco):
+            linha = bloco[i]
+            stripped = linha.strip()
+
+            m_prec = re.match(r"^precedence\s*:\s*(-?\d+)", stripped)
+            if m_prec:
+                try:
+                    cg.precedencia = int(m_prec.group(1))
+                except ValueError:
+                    pass
+                i += 1
+                continue
+
+            m_item = re.match(r"^calculationItem\s+['\"]?(.+?)['\"]?\s*=\s*(.*)$", stripped)
+            if m_item:
+                nome_item = limpar_nome(m_item.group(1))
+                primeiro = m_item.group(2).strip()
+                indent_item = _tmdl_indent(linha)
+                sub_bloco, prox = _tmdl_coletar_bloco(bloco, i, indent_item)
+
+                # Acumula expressao DAX ate encontrar propriedade conhecida
+                dax_pedacos: List[str] = [primeiro] if primeiro else []
+                fmt_def: Optional[str] = None
+                ordinal: Optional[int] = None
+                consumido_dax = 0
+                modo = "dax"
+                for sub in sub_bloco:
+                    sub_s = sub.strip()
+                    if not sub_s:
+                        if modo == "dax":
+                            dax_pedacos.append("")
+                            consumido_dax += 1
+                        continue
+                    if sub_s.startswith("formatStringDefinition"):
+                        modo = "fmt"
+                        m_fmt = re.match(r"^formatStringDefinition\s*=\s*(.*)$", sub_s)
+                        fmt_def = (m_fmt.group(1).strip() if m_fmt else "") or None
+                        continue
+                    if sub_s.startswith("ordinal"):
+                        m_ord = re.match(r"^ordinal\s*:\s*(-?\d+)", sub_s)
+                        if m_ord:
+                            try:
+                                ordinal = int(m_ord.group(1))
+                            except ValueError:
+                                pass
+                        modo = "skip"
+                        continue
+                    if sub_s.startswith(("annotation", "lineageTag", "description:")):
+                        modo = "skip"
+                        continue
+                    if modo == "dax":
+                        dax_pedacos.append(sub_s)
+                        consumido_dax += 1
+                    elif modo == "fmt":
+                        # Continuacao do format string
+                        fmt_def = ((fmt_def or "") + "\n" + sub_s).strip()
+
+                cg.itens.append(InfoCalculationItem(
+                    nome=nome_item,
+                    expressao_dax="\n".join(dax_pedacos).strip(),
+                    formato_dinamico=fmt_def,
+                    ordinal=ordinal,
+                    descricao=_tmdl_descricao_antes(bloco, i) if False else None,
+                ))
+                i = prox
+                continue
+
+            i += 1
+
+        # Ordena por ordinal quando disponivel (None vai pro fim, estavel)
+        cg.itens.sort(key=lambda it: (it.ordinal is None, it.ordinal or 0))
+        return cg
+    except Exception as e:
+        print(f"  [AVISO] Falha ao detectar calculation group em {caminho_tabela}: {e}")
+        return None
+
+
+# ============================================================================
 # CLASSE PRINCIPAL
 # ============================================================================
 
@@ -2354,6 +2972,11 @@ class DocumentadorPBIP:
         self.total_visuais = 0
         self.visuais_personalizados = []
         self.recursos_imagem = []
+        # Features v0.9.0 — listas vazias = secao nao renderizada (skip silencioso).
+        self.calculation_groups: List[InfoCalculationGroup] = []
+        self.perspectivas: List[InfoPerspectiva] = []
+        self.roles: List[InfoRole] = []
+        self.named_expressions: List[InfoNamedExpression] = []
         self._md_cache: Optional[str] = None
         self._dicionario_cache: Optional[List[TermoDicionario]] = None
         self.branding = BrandingConfig()
@@ -2363,6 +2986,51 @@ class DocumentadorPBIP:
 
         # Encontra o projeto e detecta o layout
         self._encontrar_pbip()
+        # Valida estrutura minima antes de tentar extrair — falha rapido com
+        # mensagem amigavel em vez de stacktrace cru no meio do parsing.
+        self._validar_estrutura()
+
+    def _validar_estrutura(self):
+        """Valida que a estrutura minima do PBIP esta intacta.
+
+        Checa apenas o que e estritamente necessario para a extracao nao
+        explodir com stacktrace. Falhas viram FileNotFoundError com mensagem
+        i18n que o sidecar repassa ao usuario via _imprimir_json.
+
+        Itens nao-criticos (Report ausente, sem tabelas, sem relacionamentos)
+        geram apenas [AVISO] — a documentacao do que existe ainda e gerada.
+        """
+        problemas: List[str] = []
+
+        # 1. Pasta do modelo precisa existir
+        pasta_modelo = self._obter_pasta_modelo()
+        if not pasta_modelo.is_dir():
+            problemas.append(i18n.t("validate.missing_model_folder", folder=str(pasta_modelo)))
+
+        # 2. model.tmdl e o ponto de entrada do modelo semantico — sem ele
+        # nem dataformatschema basico da pra inferir, e parse_tmdl_model
+        # estoura FileNotFoundError feio.
+        model_tmdl = pasta_modelo / "model.tmdl"
+        if pasta_modelo.is_dir() and not model_tmdl.is_file():
+            problemas.append(i18n.t("validate.missing_model_tmdl", file=str(model_tmdl)))
+
+        if problemas:
+            mensagem = "\n".join([
+                i18n.t("validate.header", project=str(self.caminho_projeto)),
+                *[f"  • {p}" for p in problemas],
+                "",
+                i18n.t("validate.hint"),
+            ])
+            raise FileNotFoundError(mensagem)
+
+        # Avisos nao-bloqueantes (visiveis no stderr/CapturaLogs).
+        pasta_report = self._obter_pasta_report()
+        if not pasta_report.is_dir():
+            print(f"[AVISO] {i18n.t('validate.missing_report_folder', folder=str(pasta_report))}")
+
+        pasta_tables = pasta_modelo / "tables"
+        if not pasta_tables.is_dir() or not list(pasta_tables.glob("*.tmdl")):
+            print(f"[AVISO] {i18n.t('validate.no_tables')}")
 
     def _encontrar_pbip(self):
         """Encontra o projeto Power BI na pasta e detecta o layout"""
@@ -2447,6 +3115,13 @@ class DocumentadorPBIP:
         print("Extraindo relacionamentos...")
         self._extrair_relacionamentos()
 
+        # Features v0.9.0 — todas seguem regra "if exists else skip":
+        # parsers retornam [] quando o arquivo/pasta nao existe.
+        print("Extraindo perspectivas, roles e expressoes nomeadas...")
+        self._extrair_perspectivas()
+        self._extrair_roles()
+        self._extrair_named_expressions()
+
         print("Extraindo páginas do relatório...")
         self._extrair_paginas()
 
@@ -2460,6 +3135,53 @@ class DocumentadorPBIP:
         self._indexar_medidas()
 
         print("[OK] Extração concluída!\n")
+
+    def _extrair_perspectivas(self):
+        """v0.9.0 — Coleta perspectivas de definition/perspectives/*.tmdl.
+
+        Skip silencioso: pasta ausente => self.perspectivas = []. Nenhuma
+        secao 'Perspectivas' sera renderizada na doc.
+        """
+        try:
+            pasta = self._obter_pasta_modelo() / "perspectives"
+            self.perspectivas = parse_tmdl_perspectives_dir(str(pasta))
+            if self.perspectivas:
+                print(f"  [OK] {len(self.perspectivas)} perspectivas encontradas")
+        except Exception as e:
+            print(f"  [AVISO] Falha ao extrair perspectivas: {e}")
+            self.perspectivas = []
+
+    def _extrair_roles(self):
+        """v0.9.0 — Coleta RLS roles (e OLS) de definition/roles/*.tmdl.
+
+        Skip silencioso: pasta ausente => self.roles = []. Nenhuma secao
+        'Seguranca' sera renderizada na doc.
+        """
+        try:
+            pasta = self._obter_pasta_modelo() / "roles"
+            self.roles = parse_tmdl_roles_dir(str(pasta))
+            if self.roles:
+                print(f"  [OK] {len(self.roles)} roles encontrados")
+        except Exception as e:
+            print(f"  [AVISO] Falha ao extrair roles: {e}")
+            self.roles = []
+
+    def _extrair_named_expressions(self):
+        """v0.9.0 — Coleta parametros M e queries compartilhadas.
+
+        Arquivo unico: definition/expressions.tmdl. Skip silencioso quando
+        ausente. Lista vazia => nenhuma secao 'Parametros' renderizada.
+        """
+        try:
+            caminho = self._obter_pasta_modelo() / "expressions.tmdl"
+            self.named_expressions = parse_tmdl_expressions(str(caminho))
+            if self.named_expressions:
+                qtd_param = sum(1 for ne in self.named_expressions if ne.eh_parametro)
+                qtd_other = len(self.named_expressions) - qtd_param
+                print(f"  [OK] {qtd_param} parametros M + {qtd_other} expressoes nomeadas")
+        except Exception as e:
+            print(f"  [AVISO] Falha ao extrair named expressions: {e}")
+            self.named_expressions = []
 
     def _indexar_medidas(self):
         """Constroi medidas_index: nome_medida -> nome_tabela.
@@ -2506,6 +3228,16 @@ class DocumentadorPBIP:
 
             for arquivo in arquivos_tmdl:
                 try:
+                    # v0.9.0 — detecta calc group antes da tabela normal.
+                    # Calc groups sao `table` com bloco `calculationGroup`;
+                    # vao para self.calculation_groups (secao dedicada) e nao
+                    # poluem a lista de tabelas regulares.
+                    cg = parse_tmdl_calculation_group(str(arquivo))
+                    if cg:
+                        self.calculation_groups.append(cg)
+                        print(f"  [OK] Calc Group: {cg.nome_tabela} ({len(cg.itens)} itens, precedencia {cg.precedencia})")
+                        continue
+
                     tabela = parse_tmdl_table(str(arquivo))
 
                     if tabela:
@@ -4109,6 +4841,13 @@ class DocumentadorPBIP:
 
 
 
+        # v0.9.0 — Secoes novas (calc groups / perspectivas / seguranca / parametros M).
+        # Cada helper retorna [] se nao houver conteudo, garantindo "if exists else skip".
+        md.extend(self._md_calculation_groups())
+        md.extend(self._md_perspectivas())
+        md.extend(self._md_seguranca())
+        md.extend(self._md_named_expressions())
+
         # Visuais Personalizados
         if self.visuais_personalizados:
             md.append(f"---")
@@ -4139,6 +4878,219 @@ class DocumentadorPBIP:
 
         self._md_cache = '\n'.join(md)
         return self._md_cache
+
+    # ------------------------------------------------------------------------
+    # v0.9.0 — Helpers de renderizacao Markdown para features novas.
+    # Cada um retorna List[str] (linhas) e devolve [] quando self.<colecao>
+    # estiver vazia — assim a "secao some" se o PBIP nao tem o recurso.
+    # ------------------------------------------------------------------------
+
+    def _md_calculation_groups(self) -> List[str]:
+        """🧮 Grupos de Cálculo — uma subsecao por calc group."""
+        if not self.calculation_groups:
+            return []
+        lines: List[str] = ["---", "", f"## {_t('doc.section.calc_groups')}", ""]
+        lines.append(_t("calc_groups.intro"))
+        lines.append("")
+        for cg in self.calculation_groups:
+            lines.append(f"### 🧮 {cg.nome_tabela}")
+            lines.append("")
+            lines.append(f"**{_t('calc_groups.precedence')}**: `{cg.precedencia}`")
+            if cg.descricao:
+                lines.append("")
+                lines.append(f"> {cg.descricao}")
+            lines.append("")
+            if not cg.itens:
+                lines.append(f"_{_t('calc_groups.no_items')}_")
+                lines.append("")
+                continue
+            lines.append(f"| # | {_t('calc_groups.col.name')} | {_t('calc_groups.col.ordinal')} |")
+            lines.append("|---|---|---|")
+            for idx, item in enumerate(cg.itens, 1):
+                ord_str = str(item.ordinal) if item.ordinal is not None else "—"
+                lines.append(f"| {idx} | `{item.nome}` | {ord_str} |")
+            lines.append("")
+            # Detalhe DAX/format string por item
+            for item in cg.itens:
+                lines.append(f"#### {item.nome}")
+                lines.append("")
+                lines.append(f"**{_t('calc_groups.expr')}**")
+                lines.append("")
+                lines.append("```dax")
+                lines.append(item.expressao_dax or "")
+                lines.append("```")
+                if item.formato_dinamico:
+                    lines.append("")
+                    lines.append(f"**{_t('calc_groups.format_string')}**")
+                    lines.append("")
+                    lines.append("```dax")
+                    lines.append(item.formato_dinamico)
+                    lines.append("```")
+                lines.append("")
+        return lines
+
+    def _md_perspectivas(self) -> List[str]:
+        """👁️ Perspectivas — uma por bloco."""
+        if not self.perspectivas:
+            return []
+        lines: List[str] = ["---", "", f"## {_t('doc.section.perspectives')}", ""]
+        lines.append(_t("perspectives.intro"))
+        lines.append("")
+        for persp in self.perspectivas:
+            lines.append(f"### 👁️ {persp.nome}")
+            lines.append("")
+            if persp.descricao:
+                lines.append(f"> {persp.descricao}")
+                lines.append("")
+            if not persp.tabelas:
+                lines.append(f"_{_t('perspectives.empty')}_")
+                lines.append("")
+                continue
+            lines.append(f"| {_t('perspectives.col.table')} | {_t('perspectives.col.included')} |")
+            lines.append("|---|---|")
+            for ref in persp.tabelas:
+                if ref.tabela_inteira:
+                    incluido = f"_{_t('perspectives.whole_table')}_"
+                else:
+                    partes: List[str] = []
+                    if ref.colunas:
+                        partes.append(_t("perspectives.col_count", n=len(ref.colunas)))
+                    if ref.medidas:
+                        partes.append(_t("perspectives.measure_count", n=len(ref.medidas)))
+                    if ref.hierarquias:
+                        partes.append(_t("perspectives.hier_count", n=len(ref.hierarquias)))
+                    incluido = " · ".join(partes) if partes else "—"
+                lines.append(f"| `{ref.nome}` | {incluido} |")
+            lines.append("")
+            # Detalhamento por tabela (so quando nao for "tabela inteira")
+            for ref in persp.tabelas:
+                if ref.tabela_inteira:
+                    continue
+                if not (ref.colunas or ref.medidas or ref.hierarquias):
+                    continue
+                lines.append(f"**{ref.nome}**")
+                lines.append("")
+                if ref.colunas:
+                    lines.append(f"- {_t('perspectives.col.columns')}: " + ", ".join(f"`{c}`" for c in ref.colunas))
+                if ref.medidas:
+                    lines.append(f"- {_t('perspectives.col.measures')}: " + ", ".join(f"`{m}`" for m in ref.medidas))
+                if ref.hierarquias:
+                    lines.append(f"- {_t('perspectives.col.hierarchies')}: " + ", ".join(f"`{h}`" for h in ref.hierarquias))
+                lines.append("")
+        return lines
+
+    def _md_seguranca(self) -> List[str]:
+        """🔒 Segurança (RLS) — uma subsecao por role, OLS junto."""
+        if not self.roles:
+            return []
+        lines: List[str] = ["---", "", f"## {_t('doc.section.security')}", ""]
+        lines.append(_t("security.intro"))
+        lines.append("")
+        for role in self.roles:
+            lines.append(f"### 🔒 {role.nome}")
+            lines.append("")
+            lines.append(f"**{_t('security.model_permission')}**: `{role.model_permission}`")
+            if role.descricao:
+                lines.append("")
+                lines.append(f"> {role.descricao}")
+            if role.membros:
+                lines.append("")
+                lines.append(f"**{_t('security.members')}**: " + ", ".join(f"`{m}`" for m in role.membros))
+            lines.append("")
+
+            if not role.table_permissions:
+                lines.append(f"_{_t('security.no_table_permissions')}_")
+                lines.append("")
+                continue
+
+            # Tabela resumo das table permissions
+            lines.append(f"| {_t('security.col.table')} | {_t('security.col.rls')} | {_t('security.col.ols')} |")
+            lines.append("|---|---|---|")
+            for tp in role.table_permissions:
+                rls_cell = "✅" if tp.filtro_dax else "—"
+                if tp.metadata_permission or tp.colunas_permissao:
+                    ols_parts = []
+                    if tp.metadata_permission:
+                        ols_parts.append(f"`{tp.metadata_permission}`")
+                    if tp.colunas_permissao:
+                        ols_parts.append(_t("security.cols_restricted", n=len(tp.colunas_permissao)))
+                    ols_cell = " / ".join(ols_parts)
+                else:
+                    ols_cell = "—"
+                lines.append(f"| `{tp.nome_tabela}` | {rls_cell} | {ols_cell} |")
+            lines.append("")
+
+            # Detalhamento por tabela
+            for tp in role.table_permissions:
+                if tp.filtro_dax:
+                    lines.append(f"#### `{tp.nome_tabela}` — {_t('security.filter')}")
+                    lines.append("")
+                    lines.append("```dax")
+                    lines.append(tp.filtro_dax)
+                    lines.append("```")
+                    lines.append("")
+                if tp.colunas_permissao:
+                    lines.append(f"#### `{tp.nome_tabela}` — {_t('security.column_permissions')}")
+                    lines.append("")
+                    lines.append(f"| {_t('security.col.column')} | {_t('security.col.permission')} |")
+                    lines.append("|---|---|")
+                    for cp in tp.colunas_permissao:
+                        lines.append(f"| `{cp.nome}` | `{cp.permissao}` |")
+                    lines.append("")
+        return lines
+
+    def _md_named_expressions(self) -> List[str]:
+        """🔧 Parâmetros e Expressões M — parametros e queries compartilhadas."""
+        if not self.named_expressions:
+            return []
+        params = [ne for ne in self.named_expressions if ne.eh_parametro]
+        outros = [ne for ne in self.named_expressions if not ne.eh_parametro]
+
+        lines: List[str] = ["---", "", f"## {_t('doc.section.named_expressions')}", ""]
+        lines.append(_t("named_expressions.intro"))
+        lines.append("")
+
+        if params:
+            lines.append(f"### 🔧 {_t('named_expressions.params_heading')}")
+            lines.append("")
+            lines.append(
+                f"| {_t('named_expressions.col.name')} | {_t('named_expressions.col.type')} | "
+                f"{_t('named_expressions.col.required')} | {_t('named_expressions.col.value')} | "
+                f"{_t('named_expressions.col.group')} |"
+            )
+            lines.append("|---|---|---|---|---|")
+            for ne in params:
+                # O parametro pode ser multilinha (`"valor" meta [\n  IsParameterQuery=true,\n  ...]`)
+                # entao limpamos `meta [...]` no texto completo (com DOTALL) e
+                # so depois pegamos a primeira linha + truncamos.
+                completa = (ne.expressao or "")
+                sem_meta = re.sub(r"\s*meta\s*\[.*?\]\s*$", "", completa, flags=re.DOTALL).strip()
+                valor_resumo = (sem_meta.splitlines()[0].strip() if sem_meta else "") or "—"
+                if len(valor_resumo) > 60:
+                    valor_resumo = valor_resumo[:57] + "..."
+                tipo = f"`{ne.tipo_parametro}`" if ne.tipo_parametro else "—"
+                obrig = "✅" if ne.obrigatorio else "—"
+                grupo = f"`{ne.grupo_consulta}`" if ne.grupo_consulta else "—"
+                lines.append(f"| `{ne.nome}` | {tipo} | {obrig} | {valor_resumo or '—'} | {grupo} |")
+            lines.append("")
+
+        if outros:
+            lines.append(f"### 📜 {_t('named_expressions.queries_heading')}")
+            lines.append("")
+            for ne in outros:
+                lines.append(f"#### {ne.nome}")
+                lines.append("")
+                if ne.descricao:
+                    lines.append(f"> {ne.descricao}")
+                    lines.append("")
+                if ne.grupo_consulta:
+                    lines.append(f"**{_t('named_expressions.col.group')}**: `{ne.grupo_consulta}`")
+                    lines.append("")
+                lines.append("```powerquery")
+                lines.append(ne.expressao or "")
+                lines.append("```")
+                lines.append("")
+        return lines
 
     def salvar_documentacao(self, caminho_saida: Optional[str] = None):
         """
@@ -5423,6 +6375,189 @@ class DocumentadorPBIP:
                 lang = "DAX" if _codigo_fonte_eh_dax(codigo_formatado) else "Power Query M"
                 _add_code_block(codigo_formatado, lang)
 
+
+        # ====================================================================
+        # v0.9.0 — CALCULATION GROUPS (se houver)
+        # ====================================================================
+        if self.calculation_groups:
+            doc.add_heading(_t("doc.section.calc_groups"), level=1)
+            p_intro = doc.add_paragraph()
+            _set_run_font(p_intro.add_run(_t("calc_groups.intro")), FONT_MAIN, FONT_BODY, CINZA_TX, italic=True)
+
+            for cg in self.calculation_groups:
+                doc.add_heading(cg.nome_tabela, level=2)
+                p_meta = doc.add_paragraph()
+                _set_run_font(p_meta.add_run(_t("calc_groups.precedence") + ": "), FONT_MAIN, FONT_BODY, CINZA_TX, bold=True)
+                _set_run_font(p_meta.add_run(str(cg.precedencia)), FONT_CODE, FONT_BODY, CINZA_TX)
+                if cg.descricao:
+                    p_desc = doc.add_paragraph()
+                    _set_run_font(p_desc.add_run(cg.descricao), FONT_MAIN, FONT_BODY, CINZA_TX, italic=True)
+
+                if not cg.itens:
+                    p_emp = doc.add_paragraph()
+                    _set_run_font(p_emp.add_run(_t("calc_groups.no_items")), FONT_MAIN, FONT_BODY, CINZA_LT, italic=True)
+                    continue
+
+                # Tabela resumo
+                rows_cg = []
+                for idx, item in enumerate(cg.itens, 1):
+                    ord_str = str(item.ordinal) if item.ordinal is not None else "—"
+                    rows_cg.append([str(idx), item.nome, ord_str])
+                _add_table(["#", _t("calc_groups.col.name"), _t("calc_groups.col.ordinal")], rows_cg, compact=True)
+
+                # Detalhe DAX por item
+                for item in cg.itens:
+                    doc.add_heading(item.nome, level=3)
+                    _add_code_block(item.expressao_dax or "", "DAX", label=_t("calc_groups.expr").upper())
+                    if item.formato_dinamico:
+                        _add_code_block(item.formato_dinamico, "DAX", label=_t("calc_groups.format_string").upper(), compact=True)
+
+        # ====================================================================
+        # v0.9.0 — PERSPECTIVAS (se houver)
+        # ====================================================================
+        if self.perspectivas:
+            doc.add_heading(_t("doc.section.perspectives"), level=1)
+            p_intro = doc.add_paragraph()
+            _set_run_font(p_intro.add_run(_t("perspectives.intro")), FONT_MAIN, FONT_BODY, CINZA_TX, italic=True)
+
+            for persp in self.perspectivas:
+                doc.add_heading(persp.nome, level=2)
+                if persp.descricao:
+                    p_desc = doc.add_paragraph()
+                    _set_run_font(p_desc.add_run(persp.descricao), FONT_MAIN, FONT_BODY, CINZA_TX, italic=True)
+                if not persp.tabelas:
+                    p_emp = doc.add_paragraph()
+                    _set_run_font(p_emp.add_run(_t("perspectives.empty")), FONT_MAIN, FONT_BODY, CINZA_LT, italic=True)
+                    continue
+                rows_persp = []
+                for ref in persp.tabelas:
+                    if ref.tabela_inteira:
+                        incluido = _t("perspectives.whole_table")
+                    else:
+                        partes = []
+                        if ref.colunas:
+                            partes.append(_t("perspectives.col_count", n=len(ref.colunas)))
+                        if ref.medidas:
+                            partes.append(_t("perspectives.measure_count", n=len(ref.medidas)))
+                        if ref.hierarquias:
+                            partes.append(_t("perspectives.hier_count", n=len(ref.hierarquias)))
+                        incluido = " · ".join(partes) if partes else "—"
+                    rows_persp.append([ref.nome, incluido])
+                _add_table([_t("perspectives.col.table"), _t("perspectives.col.included")], rows_persp, compact=True)
+
+                # Detalhamento por tabela quando nao for "tabela inteira"
+                for ref in persp.tabelas:
+                    if ref.tabela_inteira or not (ref.colunas or ref.medidas or ref.hierarquias):
+                        continue
+                    doc.add_heading(ref.nome, level=3)
+                    if ref.colunas:
+                        _add_bullet_list(_t("perspectives.col.columns"), ref.colunas)
+                    if ref.medidas:
+                        _add_bullet_list(_t("perspectives.col.measures"), ref.medidas)
+                    if ref.hierarquias:
+                        _add_bullet_list(_t("perspectives.col.hierarchies"), ref.hierarquias)
+
+        # ====================================================================
+        # v0.9.0 — SEGURANCA (RLS / OLS) (se houver)
+        # ====================================================================
+        if self.roles:
+            doc.add_heading(_t("doc.section.security"), level=1)
+            p_intro = doc.add_paragraph()
+            _set_run_font(p_intro.add_run(_t("security.intro")), FONT_MAIN, FONT_BODY, CINZA_TX, italic=True)
+
+            for role in self.roles:
+                doc.add_heading(role.nome, level=2)
+                p_mp = doc.add_paragraph()
+                _set_run_font(p_mp.add_run(_t("security.model_permission") + ": "), FONT_MAIN, FONT_BODY, CINZA_TX, bold=True)
+                _set_run_font(p_mp.add_run(role.model_permission), FONT_CODE, FONT_BODY, CINZA_TX)
+                if role.descricao:
+                    p_desc = doc.add_paragraph()
+                    _set_run_font(p_desc.add_run(role.descricao), FONT_MAIN, FONT_BODY, CINZA_TX, italic=True)
+                if role.membros:
+                    _add_bullet_list(_t("security.members"), role.membros)
+
+                if not role.table_permissions:
+                    p_emp = doc.add_paragraph()
+                    _set_run_font(p_emp.add_run(_t("security.no_table_permissions")), FONT_MAIN, FONT_BODY, CINZA_LT, italic=True)
+                    continue
+
+                # Tabela resumo de permissions
+                rows_sec = []
+                for tp in role.table_permissions:
+                    rls_cell = "✅" if tp.filtro_dax else "—"
+                    if tp.metadata_permission or tp.colunas_permissao:
+                        ols_parts = []
+                        if tp.metadata_permission:
+                            ols_parts.append(tp.metadata_permission)
+                        if tp.colunas_permissao:
+                            ols_parts.append(_t("security.cols_restricted", n=len(tp.colunas_permissao)))
+                        ols_cell = " / ".join(ols_parts)
+                    else:
+                        ols_cell = "—"
+                    rows_sec.append([tp.nome_tabela, rls_cell, ols_cell])
+                _add_table([_t("security.col.table"), _t("security.col.rls"), _t("security.col.ols")], rows_sec, compact=True)
+
+                # Detalhe RLS e OLS por tabela
+                for tp in role.table_permissions:
+                    if tp.filtro_dax:
+                        doc.add_heading(f"{tp.nome_tabela} — {_t('security.filter')}", level=3)
+                        _add_code_block(tp.filtro_dax, "DAX")
+                    if tp.colunas_permissao:
+                        doc.add_heading(f"{tp.nome_tabela} — {_t('security.column_permissions')}", level=3)
+                        rows_cp = [[cp.nome, cp.permissao] for cp in tp.colunas_permissao]
+                        _add_table([_t("security.col.column"), _t("security.col.permission")], rows_cp, compact=True)
+
+        # ====================================================================
+        # v0.9.0 — PARAMETROS E EXPRESSOES M (se houver)
+        # ====================================================================
+        if self.named_expressions:
+            doc.add_heading(_t("doc.section.named_expressions"), level=1)
+            p_intro = doc.add_paragraph()
+            _set_run_font(p_intro.add_run(_t("named_expressions.intro")), FONT_MAIN, FONT_BODY, CINZA_TX, italic=True)
+
+            params = [ne for ne in self.named_expressions if ne.eh_parametro]
+            outros = [ne for ne in self.named_expressions if not ne.eh_parametro]
+
+            if params:
+                doc.add_heading(_t("named_expressions.params_heading"), level=2)
+                rows_p = []
+                for ne in params:
+                    completa = (ne.expressao or "")
+                    sem_meta = re.sub(r"\s*meta\s*\[.*?\]\s*$", "", completa, flags=re.DOTALL).strip()
+                    valor = (sem_meta.splitlines()[0].strip() if sem_meta else "") or "—"
+                    if len(valor) > 60:
+                        valor = valor[:57] + "..."
+                    rows_p.append([
+                        ne.nome,
+                        ne.tipo_parametro or "—",
+                        "✅" if ne.obrigatorio else "—",
+                        valor,
+                        ne.grupo_consulta or "—",
+                    ])
+                _add_table(
+                    [
+                        _t("named_expressions.col.name"),
+                        _t("named_expressions.col.type"),
+                        _t("named_expressions.col.required"),
+                        _t("named_expressions.col.value"),
+                        _t("named_expressions.col.group"),
+                    ],
+                    rows_p,
+                    compact=True,
+                )
+
+            if outros:
+                doc.add_heading(_t("named_expressions.queries_heading"), level=2)
+                for ne in outros:
+                    doc.add_heading(ne.nome, level=3)
+                    if ne.descricao:
+                        p_desc = doc.add_paragraph()
+                        _set_run_font(p_desc.add_run(ne.descricao), FONT_MAIN, FONT_BODY, CINZA_TX, italic=True)
+                    if ne.grupo_consulta:
+                        p_g = doc.add_paragraph()
+                        _set_run_font(p_g.add_run(_t("named_expressions.col.group") + ": "), FONT_MAIN, FONT_BODY, CINZA_TX, bold=True)
+                        _set_run_font(p_g.add_run(ne.grupo_consulta), FONT_CODE, FONT_BODY, CINZA_TX)
+                    _add_code_block(ne.expressao or "", "Power Query M")
 
         # ====================================================================
         # VISUAIS PERSONALIZADOS

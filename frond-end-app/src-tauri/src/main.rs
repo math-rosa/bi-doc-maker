@@ -192,6 +192,71 @@ fn scan_pbip_projects(root: String) -> Result<Vec<PbipEntry>, String> {
     Ok(results)
 }
 
+/// Resolve o "root" de um projeto PBIP a partir de um caminho qualquer.
+///
+/// Cenarios cobertos (fallback de varredura quando `scan_pbip_projects` volta 0):
+/// - Usuario arrastou o arquivo `Vendas.pbip`           -> retorna a pasta-mae
+/// - Usuario arrastou a pasta `Vendas/`                 -> retorna ela mesma
+/// - Usuario arrastou `Vendas/Model/tables/`            -> sobe ate `Vendas/`
+/// - Usuario arrastou `Vendas/Vendas.SemanticModel/`    -> sobe ate `Vendas/`
+///
+/// Sobe no maximo `MAX_UP` niveis para evitar varrer o disco inteiro em
+/// caminhos sem nenhum projeto valido. Retorna None se nada for encontrado.
+fn resolve_pbip_root_path(start: &Path) -> Option<PathBuf> {
+    const MAX_UP: usize = 6;
+
+    // Se for um arquivo .pbip, comeca pela pasta-mae.
+    let initial: PathBuf = if start.is_file() {
+        if let Some(ext) = start.extension().and_then(|s| s.to_str()) {
+            if ext.eq_ignore_ascii_case("pbip") {
+                start.parent()?.to_path_buf()
+            } else {
+                return None;
+            }
+        } else {
+            return None;
+        }
+    } else if start.is_dir() {
+        start.to_path_buf()
+    } else {
+        return None;
+    };
+
+    let mut current = initial;
+    for _ in 0..=MAX_UP {
+        if detect_pbip_name(&current).is_some() {
+            return Some(current);
+        }
+        match current.parent() {
+            Some(parent) => current = parent.to_path_buf(),
+            None => break,
+        }
+    }
+    None
+}
+
+#[tauri::command]
+fn resolve_pbip_root(path: String) -> Result<Option<PbipEntry>, String> {
+    let valid = validate_path(&path)?;
+    let start = PathBuf::from(&valid);
+
+    let resolved = match resolve_pbip_root_path(&start) {
+        Some(p) => p,
+        None => return Ok(None),
+    };
+
+    let name = match detect_pbip_name(&resolved) {
+        Some(n) => n,
+        None => return Ok(None),
+    };
+
+    Ok(Some(PbipEntry {
+        name,
+        path: resolved.to_string_lossy().to_string(),
+        kind: "pbip".to_string(),
+    }))
+}
+
 fn open_cross_platform(path: String) -> Result<(), String> {
     let cmd = if cfg!(target_os = "windows") {
         SystemCommand::new("explorer.exe").arg(path).spawn()
@@ -470,6 +535,7 @@ fn main() {
             open_output_file,
             open_external_url,
             scan_pbip_projects,
+            resolve_pbip_root,
             check_for_updates
         ])
         .run(tauri::generate_context!())

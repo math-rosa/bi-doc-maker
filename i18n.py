@@ -439,6 +439,74 @@ _PT_BR: Dict[str, str] = {
     "docx.rel.col.to_column": "Coluna de Destino",
     "docx.rel.col.bidirectional": "Bidirecional",
     "docx.rel.col.active": "Ativo",
+
+    # -------------------------------------------------------------------
+    # Validacao estrutural do PBIP (pre-extracao)
+    # -------------------------------------------------------------------
+    "validate.header": "Não foi possível documentar o projeto em {project}. Estrutura PBIP incompleta:",
+    "validate.missing_model_folder": "Pasta do modelo semântico não encontrada: {folder}",
+    "validate.missing_model_tmdl": "Arquivo principal do modelo (model.tmdl) não encontrado: {file}",
+    "validate.missing_report_folder": "Pasta do relatório não encontrada: {folder} — a documentação será gerada sem páginas/visuais.",
+    "validate.no_tables": "Nenhuma tabela TMDL encontrada no modelo — a documentação será mínima.",
+    "validate.hint": "Abra o projeto no Power BI Desktop, salve novamente como PBIP e tente outra vez.",
+
+    # -------------------------------------------------------------------
+    # v0.9.0 — Calculation Groups
+    # -------------------------------------------------------------------
+    "doc.section.calc_groups": "🧮 Grupos de Cálculo",
+    "calc_groups.intro": "Grupos de cálculo permitem aplicar variações dinâmicas (ex: YTD, YoY, % Total) sobre medidas existentes, sem precisar duplicá-las.",
+    "calc_groups.precedence": "Precedência",
+    "calc_groups.no_items": "Nenhum item de cálculo definido.",
+    "calc_groups.col.name": "Item",
+    "calc_groups.col.ordinal": "Ordem",
+    "calc_groups.expr": "Expressão DAX",
+    "calc_groups.format_string": "Format String dinâmica",
+
+    # -------------------------------------------------------------------
+    # v0.9.0 — Perspectives
+    # -------------------------------------------------------------------
+    "doc.section.perspectives": "👁️ Perspectivas",
+    "perspectives.intro": "Perspectivas são visões reduzidas do modelo para diferentes audiências. Mostram apenas um subconjunto de tabelas, colunas e medidas — sem restringir acesso aos dados.",
+    "perspectives.empty": "Perspectiva vazia (sem tabelas declaradas).",
+    "perspectives.whole_table": "tabela inteira",
+    "perspectives.col.table": "Tabela",
+    "perspectives.col.included": "Incluído",
+    "perspectives.col.columns": "Colunas",
+    "perspectives.col.measures": "Medidas",
+    "perspectives.col.hierarchies": "Hierarquias",
+    "perspectives.col_count": "{n} coluna(s)",
+    "perspectives.measure_count": "{n} medida(s)",
+    "perspectives.hier_count": "{n} hierarquia(s)",
+
+    # -------------------------------------------------------------------
+    # v0.9.0 — Security (RLS + OLS)
+    # -------------------------------------------------------------------
+    "doc.section.security": "🔒 Segurança (RLS / OLS)",
+    "security.intro": "Roles de segurança definem **quem vê o quê**. RLS (Row-Level Security) filtra linhas por usuário; OLS (Object-Level Security) restringe metadados de colunas.",
+    "security.model_permission": "Permissão no modelo",
+    "security.members": "Membros",
+    "security.no_table_permissions": "Sem restrições por tabela — acesso total.",
+    "security.col.table": "Tabela",
+    "security.col.rls": "RLS",
+    "security.col.ols": "OLS",
+    "security.col.column": "Coluna",
+    "security.col.permission": "Permissão",
+    "security.filter": "Filtro RLS (DAX)",
+    "security.column_permissions": "Restrições de colunas (OLS)",
+    "security.cols_restricted": "{n} coluna(s) restrita(s)",
+
+    # -------------------------------------------------------------------
+    # v0.9.0 — Named Expressions (parametros M + queries compartilhadas)
+    # -------------------------------------------------------------------
+    "doc.section.named_expressions": "🔧 Parâmetros e Expressões M",
+    "named_expressions.intro": "Parâmetros e expressões compartilhadas declarados no nível do modelo. Parâmetros M (`IsParameterQuery=true`) podem ser editados sem alterar o código.",
+    "named_expressions.params_heading": "Parâmetros",
+    "named_expressions.queries_heading": "Expressões compartilhadas",
+    "named_expressions.col.name": "Nome",
+    "named_expressions.col.type": "Tipo",
+    "named_expressions.col.required": "Obrigatório",
+    "named_expressions.col.value": "Valor atual",
+    "named_expressions.col.group": "Grupo",
 }
 
 
@@ -1096,6 +1164,74 @@ _EN_US: Dict[str, str] = {
     "dax.naturalleftouterjoin.business": "joins virtual tables by shared columns.",
     "dax.naturalinnerjoin.desc": "Returns an inner join based on column names.",
     "dax.naturalinnerjoin.business": "joins virtual tables keeping only matching records.",
+
+    # -------------------------------------------------------------------
+    # PBIP structural validation (pre-extraction)
+    # -------------------------------------------------------------------
+    "validate.header": "Couldn't document the project at {project}. PBIP structure is incomplete:",
+    "validate.missing_model_folder": "Semantic model folder not found: {folder}",
+    "validate.missing_model_tmdl": "Main model file (model.tmdl) not found: {file}",
+    "validate.missing_report_folder": "Report folder not found: {folder} — documentation will be generated without pages/visuals.",
+    "validate.no_tables": "No TMDL tables found in the model — documentation will be minimal.",
+    "validate.hint": "Open the project in Power BI Desktop, save it again as PBIP and try again.",
+
+    # -------------------------------------------------------------------
+    # v0.9.0 — Calculation Groups
+    # -------------------------------------------------------------------
+    "doc.section.calc_groups": "🧮 Calculation Groups",
+    "calc_groups.intro": "Calculation groups let you apply dynamic variations (e.g. YTD, YoY, % Total) on top of existing measures without duplicating them.",
+    "calc_groups.precedence": "Precedence",
+    "calc_groups.no_items": "No calculation items defined.",
+    "calc_groups.col.name": "Item",
+    "calc_groups.col.ordinal": "Order",
+    "calc_groups.expr": "DAX expression",
+    "calc_groups.format_string": "Dynamic format string",
+
+    # -------------------------------------------------------------------
+    # v0.9.0 — Perspectives
+    # -------------------------------------------------------------------
+    "doc.section.perspectives": "👁️ Perspectives",
+    "perspectives.intro": "Perspectives are reduced views of the model for different audiences. They expose only a subset of tables, columns and measures — without restricting data access.",
+    "perspectives.empty": "Empty perspective (no tables declared).",
+    "perspectives.whole_table": "whole table",
+    "perspectives.col.table": "Table",
+    "perspectives.col.included": "Included",
+    "perspectives.col.columns": "Columns",
+    "perspectives.col.measures": "Measures",
+    "perspectives.col.hierarchies": "Hierarchies",
+    "perspectives.col_count": "{n} column(s)",
+    "perspectives.measure_count": "{n} measure(s)",
+    "perspectives.hier_count": "{n} hierarchy(ies)",
+
+    # -------------------------------------------------------------------
+    # v0.9.0 — Security (RLS + OLS)
+    # -------------------------------------------------------------------
+    "doc.section.security": "🔒 Security (RLS / OLS)",
+    "security.intro": "Security roles define **who sees what**. RLS (Row-Level Security) filters rows per user; OLS (Object-Level Security) restricts column metadata.",
+    "security.model_permission": "Model permission",
+    "security.members": "Members",
+    "security.no_table_permissions": "No table restrictions — full access.",
+    "security.col.table": "Table",
+    "security.col.rls": "RLS",
+    "security.col.ols": "OLS",
+    "security.col.column": "Column",
+    "security.col.permission": "Permission",
+    "security.filter": "RLS filter (DAX)",
+    "security.column_permissions": "Column restrictions (OLS)",
+    "security.cols_restricted": "{n} restricted column(s)",
+
+    # -------------------------------------------------------------------
+    # v0.9.0 — Named Expressions (M parameters + shared queries)
+    # -------------------------------------------------------------------
+    "doc.section.named_expressions": "🔧 Parameters and M Expressions",
+    "named_expressions.intro": "Parameters and shared expressions declared at the model level. M parameters (`IsParameterQuery=true`) can be edited without changing code.",
+    "named_expressions.params_heading": "Parameters",
+    "named_expressions.queries_heading": "Shared expressions",
+    "named_expressions.col.name": "Name",
+    "named_expressions.col.type": "Type",
+    "named_expressions.col.required": "Required",
+    "named_expressions.col.value": "Current value",
+    "named_expressions.col.group": "Group",
 }
 
 

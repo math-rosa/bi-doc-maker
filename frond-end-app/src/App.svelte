@@ -263,7 +263,27 @@
     resetScanState();
     try {
       const result = await invoke("scan_pbip_projects", { root });
-      const parsed = PbipEntryArraySchema.parse(result);
+      let parsed = PbipEntryArraySchema.parse(result);
+
+      // Fallback ascendente: se a varredura (descendente) nao encontrou nada,
+      // o usuario pode ter apontado *para dentro* de um projeto PBIP — tipo
+      // a pasta `Vendas.Report/` ou o arquivo `Vendas.pbip` direto.
+      // Inspirado em pbi-cli (MinaSaad1/pbi-cli) core/pbir_path.py.
+      if (parsed.length === 0) {
+        try {
+          const resolved = await invoke("resolve_pbip_root", { path: root });
+          if (resolved) {
+            const entry = PbipEntrySchema.parse(resolved);
+            parsed = [entry];
+            // Atualiza selectedPath para o root real do projeto encontrado,
+            // assim o "Trocar pasta" e o batch summary apontam para o lugar certo.
+            selectedPath = entry.path;
+          }
+        } catch {
+          // resolver e best-effort — se falhar, mantem o estado "vazio" original.
+        }
+      }
+
       projects = parsed;
       // Apenas PBIPs sao selecionaveis para export; PBIX viram aviso informativo.
       const pbipOnly = parsed.filter((p) => p.kind === "pbip");
