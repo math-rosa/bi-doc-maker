@@ -149,4 +149,15 @@ export const messages: Record<string, string> = {
 
   // ----- Branding defaults -----
   "branding.default_title": "Power BI Documentation",
+
+  // ----- Welcome modal (open source / support) -----
+  "welcome.eyebrow": "Open Source · Built for the Power BI community",
+  "welcome.title": "BI Doc Maker is open source 💙",
+  "welcome.body": "This project was created to help Power BI folks document PBIP projects quickly, automatically and beautifully — without depending on paid tools.",
+  "welcome.ask": "If it helped you in any way, consider supporting the project or leaving a ⭐ on GitHub. It really keeps the project moving.",
+  "welcome.cta_star": "Star on GitHub",
+  "welcome.cta_support": "Support the project",
+  "welcome.dismiss": "Maybe later",
+  "welcome.close_title": "Close",
+  "welcome.close_aria": "Close welcome message",
 };

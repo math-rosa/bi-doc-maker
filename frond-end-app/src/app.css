@@ -1337,6 +1337,157 @@ body {
   border-top: 1px solid var(--border);
 }
 
+/* === Welcome modal (open source / apoio) === */
+.welcome-backdrop {
+  background: rgba(6, 12, 22, 0.65);
+}
+
+.welcome-modal {
+  width: min(100%, 460px);
+  padding: 22px 26px 24px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--panel-bg);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.35);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  text-align: center;
+}
+
+.welcome-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  text-align: left;
+}
+
+.welcome-eyebrow {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--primary-bg);
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--primary-bg) 12%, transparent);
+}
+
+.welcome-close {
+  flex: 0 0 auto;
+}
+
+.welcome-hero {
+  margin: 4px auto 2px;
+  width: 64px;
+  height: 64px;
+  display: grid;
+  place-items: center;
+  color: var(--primary-bg);
+}
+
+.welcome-hero svg {
+  width: 56px;
+  height: 56px;
+}
+
+.welcome-title {
+  font-size: 20px;
+  line-height: 1.25;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  color: var(--text);
+}
+
+.welcome-body {
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+.welcome-ask {
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--text);
+  font-weight: 500;
+}
+
+.welcome-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.welcome-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 11px 16px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.18s ease, background 0.18s ease, border-color 0.18s ease;
+}
+
+.welcome-cta:active {
+  transform: translateY(1px);
+}
+
+.welcome-cta-icon {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+}
+
+.welcome-cta-star {
+  background: var(--primary-bg);
+  color: var(--primary-text);
+  border-color: var(--primary-bg);
+}
+
+.welcome-cta-star:hover {
+  background: var(--primary-hover);
+  border-color: var(--primary-hover);
+  box-shadow: 0 8px 22px color-mix(in srgb, var(--primary-bg) 35%, transparent);
+}
+
+.welcome-cta-support {
+  background: transparent;
+  color: var(--text);
+  border-color: var(--border);
+}
+
+.welcome-cta-support:hover {
+  background: color-mix(in srgb, var(--primary-bg) 8%, transparent);
+  border-color: var(--primary-bg);
+  color: var(--primary-bg);
+}
+
+.welcome-footer {
+  margin-top: 4px;
+}
+
+.welcome-dismiss {
+  background: none;
+  border: none;
+  padding: 6px 10px;
+  font-size: 12.5px;
+  color: var(--muted);
+  cursor: pointer;
+  border-radius: 8px;
+}
+
+.welcome-dismiss:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+
 .eyebrow {
   color: var(--muted);
   font-size: 11px;

@@ -88,6 +88,7 @@
   let errorMessage = "";
   let isExporting = false;
   let showOptions = false;
+  let showWelcomeModal = false;
   let theme: ThemeMode = "light";
   let selectedFormats: Record<OutputFormat, boolean> = { ...defaultFormats };
   let branding: BrandingOptions = { ...defaultBranding };
@@ -227,6 +228,10 @@
 
     // Verifica atualizacoes em background (nao bloqueia UI).
     checkForUpdates();
+
+    // Modal de boas-vindas aparece em TODA abertura (sem persistencia).
+    // Decisao do produto: lembrar o usuario do projeto open source toda vez.
+    showWelcomeModal = true;
   });
 
   const toggleTheme = () => {
@@ -312,9 +317,27 @@
   };
 
   const handleKeydown = (event: KeyboardEvent) => {
-    if (event.key === "Escape" && showOptions) {
-      showOptions = false;
+    if (event.key === "Escape") {
+      if (showWelcomeModal) {
+        showWelcomeModal = false;
+      } else if (showOptions) {
+        showOptions = false;
+      }
     }
+  };
+
+  const closeWelcomeModal = () => {
+    showWelcomeModal = false;
+  };
+
+  const supportFromWelcome = async () => {
+    await openExternal(links.support);
+    showWelcomeModal = false;
+  };
+
+  const starFromWelcome = async () => {
+    await openExternal(links.github);
+    showWelcomeModal = false;
   };
 
   const pickLogo = async () => {
@@ -916,6 +939,58 @@
       <footer class="modal-footer">
         <button type="button" on:click={restoreDefaults}>{$t("modal.restore_defaults")}</button>
         <button class="primary" type="button" on:click={() => (showOptions = false)}>{$t("modal.finish")}</button>
+      </footer>
+    </section>
+  </div>
+{/if}
+
+{#if showWelcomeModal}
+  <div class="modal-backdrop welcome-backdrop" role="presentation" on:click|self={closeWelcomeModal}>
+    <section class="welcome-modal" role="dialog" aria-modal="true" aria-labelledby="welcome-title">
+      <header class="welcome-header">
+        <span class="welcome-eyebrow">{$t("welcome.eyebrow")}</span>
+        <button
+          class="icon-button welcome-close"
+          type="button"
+          title={$t("welcome.close_title")}
+          aria-label={$t("welcome.close_aria")}
+          on:click={closeWelcomeModal}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </button>
+      </header>
+
+      <div class="welcome-hero" aria-hidden="true">
+        <svg viewBox="0 0 64 64" role="img" aria-label="BI Doc Maker">
+          <rect x="11" y="36" width="10" height="16" rx="2" fill="currentColor"/>
+          <rect x="27" y="26" width="10" height="26" rx="2" fill="currentColor"/>
+          <rect x="43" y="14" width="10" height="38" rx="2" fill="currentColor"/>
+        </svg>
+      </div>
+
+      <h2 id="welcome-title" class="welcome-title">{$t("welcome.title")}</h2>
+      <p class="welcome-body">{$t("welcome.body")}</p>
+      <p class="welcome-ask">{$t("welcome.ask")}</p>
+
+      <div class="welcome-actions">
+        <button type="button" class="welcome-cta welcome-cta-star" on:click={starFromWelcome}>
+          <svg viewBox="0 0 24 24" aria-hidden="true" class="welcome-cta-icon">
+            <path d="m12 3 2.9 5.9 6.5.95-4.7 4.6 1.1 6.45L12 17.8l-5.8 3.1 1.1-6.45-4.7-4.6 6.5-.95L12 3Z" fill="currentColor"/>
+          </svg>
+          <span>{$t("welcome.cta_star")}</span>
+        </button>
+        <button type="button" class="welcome-cta welcome-cta-support" on:click={supportFromWelcome}>
+          <svg viewBox="0 0 24 24" aria-hidden="true" class="welcome-cta-icon">
+            <path d="M12 20.5s-7-4.35-7-10.05A4.5 4.5 0 0 1 12 7a4.5 4.5 0 0 1 7 3.45c0 5.7-7 10.05-7 10.05Z" fill="currentColor"/>
+          </svg>
+          <span>{$t("welcome.cta_support")}</span>
+        </button>
+      </div>
+
+      <footer class="welcome-footer">
+        <button type="button" class="welcome-dismiss" on:click={closeWelcomeModal}>
+          {$t("welcome.dismiss")}
+        </button>
       </footer>
     </section>
   </div>
