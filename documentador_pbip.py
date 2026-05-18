@@ -19,6 +19,12 @@ from typing import Optional, List, Dict, Tuple
 
 import i18n
 from i18n import t as _t
+import icons
+
+
+# Versao do gerador. Aparece no rodape da capa para rastreabilidade.
+# Sincronizar manualmente com tauri.conf.json/package.json/Cargo.toml a cada release.
+__version__ = "0.9.5"
 
 
 # ============================================================================
@@ -4469,7 +4475,7 @@ class DocumentadorPBIP:
             )
 
         # ========================================================================
-        # CAPA (Página 1)
+        # CAPA (Página 1) — premium: subtitulo, box de metadados, selo de versao
         # ========================================================================
         titulo_doc = html.escape(self.branding.document_title)
         nome_projeto_html = html.escape(str(self.nome_projeto))
@@ -4480,11 +4486,24 @@ class DocumentadorPBIP:
         fact_tables_js = json.dumps(fact_tables, ensure_ascii=True)
         logo_data_uri = self._obter_logo_data_uri()
         logo_img = (
-            f"<img src='{logo_data_uri}' width='80' height='80' "
-            "style='border-radius: 16px; object-fit: contain;'/>"
+            f"<img src='{logo_data_uri}' width='110' height='110' "
+            "style='border-radius: 18px; object-fit: contain;'/>"
             if logo_data_uri else ""
         )
         data_criacao = datetime.now().strftime('%d/%m/%Y')
+
+        # Data da ultima modificacao do .pbip — sinaliza se a doc esta defasada.
+        # Procura *.pbip dentro da pasta; se nao achar, usa a propria pasta.
+        ultima_atualizacao = "—"
+        try:
+            pbip_files = list(self.caminho_projeto.glob("*.pbip"))
+            alvo = pbip_files[0] if pbip_files else self.caminho_projeto
+            ts = datetime.fromtimestamp(alvo.stat().st_mtime)
+            ultima_atualizacao = ts.strftime('%d/%m/%Y %H:%M')
+        except Exception:
+            pass
+
+        subtitulo = _t("cover.subtitle")
         md.append(
             '<div class="cover-page" '
             f'style="border-top: 6px solid {cor_primaria}; background: linear-gradient(180deg, {cor_clara}, #ffffff 42%);">'
@@ -4495,8 +4514,34 @@ class DocumentadorPBIP:
             f'<h1 class="cover-title" style="color: {cor_primaria}; '
             f'border-bottom: 3px solid {cor_secundaria};">{titulo_doc}</h1>'
         )
+        md.append(f'<p class="cover-subtitle">{subtitulo}</p>')
         md.append(f'<p class="cover-project" style="color: {cor_primaria};">{nome_projeto_html}</p>')
-        md.append(f'<p class="cover-date">{_t("cover.created_on")}: {data_criacao}</p>')
+        md.append('<div class="cover-meta">')
+        md.append(
+            f'<div class="cover-meta-row">'
+            f'<span class="cover-meta-label">{_t("cover.created_on")}</span>'
+            f'<span class="cover-meta-value">{data_criacao}</span></div>'
+        )
+        md.append(
+            f'<div class="cover-meta-row">'
+            f'<span class="cover-meta-label">{_t("cover.project_updated")}</span>'
+            f'<span class="cover-meta-value">{ultima_atualizacao}</span></div>'
+        )
+        md.append(
+            f'<div class="cover-meta-row">'
+            f'<span class="cover-meta-label">{_t("cover.tables_count")}</span>'
+            f'<span class="cover-meta-value">{len(self.tabelas)}</span></div>'
+        )
+        md.append(
+            f'<div class="cover-meta-row">'
+            f'<span class="cover-meta-label">{_t("cover.measures_count")}</span>'
+            f'<span class="cover-meta-value">{total_medidas}</span></div>'
+        )
+        md.append('</div>')
+        md.append(
+            f'<p class="cover-badge">'
+            f'{_t("cover.generated_by")} BI Doc Maker v{__version__}</p>'
+        )
         md.append('</div>')
         md.append('')
         md.append('<div class="page-break"></div>')
@@ -4510,7 +4555,9 @@ class DocumentadorPBIP:
         import unicodedata
         import re
         def gerar_slug(texto):
-            # Função para emular o slugify nativo do Python-Markdown
+            # Emula o slugify do Python-Markdown. Strippa tokens [[icon:NOME]]
+            # antes para alinhar com o pos-processamento dos ids de heading.
+            texto = icons.remover_tokens_icone(texto)
             texto = unicodedata.normalize('NFKD', texto).encode('ascii', 'ignore').decode('ascii')
             texto = re.sub(r'[^\w\s-]', '', texto).strip().lower()
             return re.sub(r'[-\s]+', '-', texto)
@@ -4524,14 +4571,20 @@ class DocumentadorPBIP:
 
         toc_items = []
         toc_items.append('<ol class="toc-list">')
+        # Sumario executivo aparece no documento (h2) — entra no TOC
+        toc_items.append(f'<li><a href="#{gerar_slug(_t("exec.title"))}">{_t("exec.title")}</a></li>')
         toc_items.append(_toc_li("doc.toc.overview"))
         if dicionario_dados:
             toc_items.append(_toc_li("doc.toc.dictionary"))
         toc_items.append(_toc_li("doc.toc.pages"))
         toc_items.append(_toc_li("doc.toc.model"))
         toc_items.append(_toc_li("doc.toc.tables_summary"))
+        # Link aponta para a secao real "Tabelas do Modelo" (h2 que de fato
+        # aparece no doc), nao para "Detalhamento das Tabelas" que era so o
+        # texto do TOC e gerava ancora morta.
         det_label = _t("doc.toc.tables_detail")
-        toc_items.append(f'<li><a href="#{gerar_slug(det_label)}">{det_label}</a>')
+        target_slug = gerar_slug(_t("doc.section.tables_in_model"))
+        toc_items.append(f'<li><a href="#{target_slug}">{det_label}</a>')
         toc_items.append('<div style="margin-left: 1em; margin-top: 0.3em;">')
         for idx, tabela in enumerate(self.tabelas, 1):
             slug = gerar_slug(f"{idx}. {tabela.nome}")
@@ -4554,19 +4607,88 @@ class DocumentadorPBIP:
         md.append(f"")
 
         # ========================================================================
-        # VISÃO GERAL (Página 3+)
+        # SUMARIO EXECUTIVO (Página 2.5) — leitura rapida para gestor
         # ========================================================================
         rel_validos_visao = self._relacionamentos_usuario()
+        n_fatos = sum(1 for tab in self.tabelas if self._classificar_tabela(tab.nome) == "fato")
+        n_dims = sum(1 for tab in self.tabelas if self._classificar_tabela(tab.nome) == "dimensao")
+        if n_fatos or n_dims:
+            exec_body = _t(
+                "exec.what.body",
+                tables=len(self.tabelas),
+                measures=total_medidas,
+                facts=n_fatos,
+                dims=n_dims,
+                pages=len(self.paginas),
+            )
+        else:
+            exec_body = _t(
+                "exec.what.body_no_dim",
+                tables=len(self.tabelas),
+                measures=total_medidas,
+                pages=len(self.paginas),
+            )
+
+        md.append(f"## {_t('exec.title')}")
+        md.append("")
+        md.append(f"_{_t('exec.intro')}_")
+        md.append("")
+        md.append('<div class="exec-summary">')
+        md.append(f'<h3>{_t("exec.what.title")}</h3>')
+        md.append(f'<p>{exec_body}</p>')
+        md.append('<div class="exec-highlights">')
+        md.append(
+            f'<div class="exec-highlight"><div class="label">{_t("exec.highlight.tables")}</div>'
+            f'<div class="value">{len(self.tabelas)}</div></div>'
+        )
+        md.append(
+            f'<div class="exec-highlight"><div class="label">{_t("exec.highlight.measures")}</div>'
+            f'<div class="value">{total_medidas}</div></div>'
+        )
+        md.append(
+            f'<div class="exec-highlight"><div class="label">{_t("exec.highlight.relationships")}</div>'
+            f'<div class="value">{len(rel_validos_visao)}</div></div>'
+        )
+        md.append(
+            f'<div class="exec-highlight"><div class="label">{_t("exec.highlight.pages")}</div>'
+            f'<div class="value">{len(self.paginas)}</div></div>'
+        )
+        md.append(
+            f'<div class="exec-highlight"><div class="label">{_t("exec.highlight.last_update")}</div>'
+            f'<div class="value" style="font-size:11pt">{ultima_atualizacao}</div></div>'
+        )
+        md.append('</div>')
+        md.append(f'<h3 style="margin-top:1.5em">{_t("exec.scope.title")}</h3>')
+        md.append(f'<p>{_t("exec.scope.body")}</p>')
+        md.append('</div>')
+        md.append('')
+        md.append('<div class="page-break"></div>')
+        md.append('')
+
+        # ========================================================================
+        # VISÃO GERAL (Página 3+) — cards visuais em vez de tabela
+        # ========================================================================
         md.append(f"## {_t('doc.section.overview')}")
         md.append(f"")
-        md.append(
-            f"| {_t('overview.col.tables')} | {_t('overview.col.measures')} | "
-            f"{_t('overview.col.columns')} | {_t('overview.col.calc_columns')} | "
-            f"{_t('overview.col.relationships')} | {_t('overview.col.pages')} |"
-        )
-        md.append(f"|:----------:|:----------:|:----------:|:-------------:|:-----------------:|:----------:|")
-        md.append(f"| **{len(self.tabelas)}** | **{total_medidas}** | **{total_colunas}** | **{total_calc}** | **{len(rel_validos_visao)}** | **{len(self.paginas)}** |")
-        md.append(f"")
+        md.append('<div class="overview-cards">')
+        cards_data = [
+            ("card-tables", len(self.tabelas), _t("overview.col.tables")),
+            ("card-measures", total_medidas, _t("overview.col.measures")),
+            ("card-columns", total_colunas, _t("overview.col.columns")),
+            ("card-calc", total_calc, _t("overview.col.calc_columns")),
+            ("card-relations", len(rel_validos_visao), _t("overview.col.relationships")),
+            ("card-pages", len(self.paginas), _t("overview.col.pages")),
+        ]
+        for icone, valor, label in cards_data:
+            md.append(
+                f'<div class="card">'
+                f'<div class="card-icon">[[icon:{icone}]]</div>'
+                f'<div class="card-value">{valor}</div>'
+                f'<div class="card-label">{label}</div>'
+                f'</div>'
+            )
+        md.append('</div>')
+        md.append('')
         resumo_dim = self._resumo_modelo_dimensional()
         if resumo_dim:
             md.append(f"{_t('overview.dimensional_label')}: {resumo_dim}.")
@@ -4582,24 +4704,44 @@ class DocumentadorPBIP:
             md.append("")
             md.append(f"> {_t('dict.intro')}")
             md.append("")
-            md.append(
-                f"| {_t('dict.col.term')} | {_t('dict.col.frequency')} | "
-                f"{_t('dict.col.category')} | {_t('dict.col.sources')} | {_t('dict.col.examples')} |"
-            )
-            md.append("|---|---:|---|---|---|")
-            for termo in dicionario_dados:
-                fontes_loc = [self._localizar_fonte_dict(f) for f in termo.fontes[:5]]
-                onde_aparece = ", ".join(fontes_loc) or "-"
-                exemplos_loc = [self._localizar_exemplo_dict(e) for e in termo.exemplos[:3]]
-                exemplos = "; ".join(exemplos_loc) or "-"
+
+            # Separa em: termos de NEGOCIO vs TECNICOS.
+            # Tecnicos: categoria "Regra Tecnica" (etapas Power Query, padroes
+            # tipo "SubstituicaoValores"). Negocio: tudo o mais.
+            cat_tecnicas = {"Regra Técnica", "Regra Tecnica", "Technical Rule"}
+            termos_negocio = [t for t in dicionario_dados if t.categoria not in cat_tecnicas]
+            termos_tecnicos = [t for t in dicionario_dados if t.categoria in cat_tecnicas]
+
+            def _render_subdic(titulo: str, lista: list, descricao: str = "") -> None:
+                if not lista:
+                    return
+                md.append(f"### {titulo}")
+                md.append("")
+                if descricao:
+                    md.append(f"_{descricao}_")
+                    md.append("")
                 md.append(
-                    f"| {escape_md_table(termo.termo)} "
-                    f"| {termo.frequencia} "
-                    f"| {escape_md_table(self._localizar_categoria_termo(termo.categoria))} "
-                    f"| {escape_md_table(onde_aparece)} "
-                    f"| {escape_md_table(exemplos)} |"
+                    f"| {_t('dict.col.term')} | {_t('dict.col.frequency')} | "
+                    f"{_t('dict.col.category')} | {_t('dict.col.sources')} | {_t('dict.col.examples')} |"
                 )
-            md.append("")
+                md.append("|---|---:|---|---|---|")
+                for termo in lista:
+                    fontes_loc = [self._localizar_fonte_dict(f) for f in termo.fontes[:5]]
+                    onde_aparece = ", ".join(fontes_loc) or "-"
+                    exemplos_loc = [self._localizar_exemplo_dict(e) for e in termo.exemplos[:3]]
+                    exemplos = "; ".join(exemplos_loc) or "-"
+                    md.append(
+                        f"| {escape_md_table(termo.termo)} "
+                        f"| {termo.frequencia} "
+                        f"| {escape_md_table(self._localizar_categoria_termo(termo.categoria))} "
+                        f"| {escape_md_table(onde_aparece)} "
+                        f"| {escape_md_table(exemplos)} |"
+                    )
+                md.append("")
+
+            _render_subdic(_t("dict.subtitle.business"), termos_negocio, _t("dict.subtitle.business_desc"))
+            _render_subdic(_t("dict.subtitle.technical"), termos_tecnicos, _t("dict.subtitle.technical_desc"))
+
             md.append("---")
             md.append("")
 
@@ -4788,7 +4930,7 @@ class DocumentadorPBIP:
             # Row(BLANK)) sera pulada via `eh_container` abaixo.
             eh_container = self._eh_container_medidas(tabela)
             if eh_container:
-                md.append(f"> 📦 **{_t('table.measures_container')}** — {len(tabela.medidas)} {_t('table.measures_lower')}.")
+                md.append(f"> [[icon:package]] **{_t('table.measures_container')}** — {len(tabela.medidas)} {_t('table.measures_lower')}.")
                 md.append(f"")
 
             # Card de metadados com badges
@@ -4799,7 +4941,7 @@ class DocumentadorPBIP:
             fonte_tipo = _t("table.source.import")
             if tabela.particao:
                 if tabela.particao.grupo_consulta:
-                    fonte_tipo = f"🗃️ {tabela.particao.grupo_consulta}"
+                    fonte_tipo = f"[[icon:database]] {tabela.particao.grupo_consulta}"
                 elif _codigo_fonte_eh_dax(tabela.particao.codigo_fonte) if tabela.particao.codigo_fonte else False:
                     fonte_tipo = _t("table.source.dax")
                 elif "Oracle" in tabela.particao.codigo_fonte if tabela.particao.codigo_fonte else False:
@@ -4824,7 +4966,7 @@ class DocumentadorPBIP:
                 md.append(f"|:-----|:----:|:-----------:|:------:|")
 
                 for coluna in tabela.colunas:
-                    oculta = "🔴" if coluna.esta_oculta else "⚪"
+                    oculta = "[[icon:circle-filled]]" if coluna.esta_oculta else "[[icon:circle-outline]]"
                     md.append(f"| `{coluna.nome}` | `{coluna.tipo_dado}` | {coluna.sumarizacao} | {oculta} |")
 
                 md.append(f"")
@@ -4908,6 +5050,28 @@ class DocumentadorPBIP:
                         md.append(f"")
 
                     leitura_medida = analisar_dax(medida.expressao_dax)
+
+                    # Estatisticas por medida (linhas DAX, funcoes unicas, deps).
+                    # Linha sutil acima do bloco de funcoes — vira chip cinza no HTML.
+                    expr_raw = str(medida.expressao_dax or "")
+                    n_linhas = len([l for l in expr_raw.splitlines() if l.strip()])
+                    n_funcs = len(leitura_medida.funcoes)
+                    n_deps = len(leitura_medida.referencias_medidas)
+                    n_tabelas = len(leitura_medida.referencias_tabelas)
+                    label_func = _t("measure.stat.functions") if n_funcs != 1 else _t("measure.stat.function")
+                    label_dep = _t("measure.stat.dependencies") if n_deps != 1 else _t("measure.stat.dependency")
+                    label_tab = _t("measure.stat.tables") if n_tabelas != 1 else _t("measure.stat.table")
+                    stats_html = (
+                        '<div class="measure-stats">'
+                        f'<span><strong>{n_linhas}</strong> {_t("measure.stat.lines")}</span>'
+                        f'<span><strong>{n_funcs}</strong> {label_func}</span>'
+                        f'<span><strong>{n_deps}</strong> {label_dep}</span>'
+                        f'<span><strong>{n_tabelas}</strong> {label_tab}</span>'
+                        '</div>'
+                    )
+                    md.append(stats_html)
+                    md.append("")
+
                     adicionar_leitura_dax_markdown(md, leitura_medida)
                     adicionar_linhagem_dax_markdown(
                         md,
@@ -4943,7 +5107,7 @@ class DocumentadorPBIP:
 
             # Hierarquias
             if tabela.hierarquias:
-                md.append(f"#### 🔀 Hierarquias")
+                md.append(f"#### [[icon:shuffle]] Hierarquias")
                 md.append(f"")
                 for hier in tabela.hierarquias:
                     niveis_str = " → ".join(hier.niveis)
@@ -5024,14 +5188,14 @@ class DocumentadorPBIP:
     # ------------------------------------------------------------------------
 
     def _md_calculation_groups(self) -> List[str]:
-        """🧮 Grupos de Cálculo — uma subsecao por calc group."""
+        """Grupos de Calculo - uma subsecao por calc group."""
         if not self.calculation_groups:
             return []
         lines: List[str] = ["---", "", f"## {_t('doc.section.calc_groups')}", ""]
         lines.append(_t("calc_groups.intro"))
         lines.append("")
         for cg in self.calculation_groups:
-            lines.append(f"### 🧮 {cg.nome_tabela}")
+            lines.append(f"### [[icon:calc]] {cg.nome_tabela}")
             lines.append("")
             lines.append(f"**{_t('calc_groups.precedence')}**: `{cg.precedencia}`")
             if cg.descricao:
@@ -5068,14 +5232,14 @@ class DocumentadorPBIP:
         return lines
 
     def _md_perspectivas(self) -> List[str]:
-        """👁️ Perspectivas — uma por bloco."""
+        """Perspectivas - uma por bloco."""
         if not self.perspectivas:
             return []
         lines: List[str] = ["---", "", f"## {_t('doc.section.perspectives')}", ""]
         lines.append(_t("perspectives.intro"))
         lines.append("")
         for persp in self.perspectivas:
-            lines.append(f"### 👁️ {persp.nome}")
+            lines.append(f"### [[icon:eye]] {persp.nome}")
             lines.append("")
             if persp.descricao:
                 lines.append(f"> {persp.descricao}")
@@ -5118,14 +5282,14 @@ class DocumentadorPBIP:
         return lines
 
     def _md_seguranca(self) -> List[str]:
-        """🔒 Segurança (RLS) — uma subsecao por role, OLS junto."""
+        """Seguranca (RLS) - uma subsecao por role, OLS junto."""
         if not self.roles:
             return []
         lines: List[str] = ["---", "", f"## {_t('doc.section.security')}", ""]
         lines.append(_t("security.intro"))
         lines.append("")
         for role in self.roles:
-            lines.append(f"### 🔒 {role.nome}")
+            lines.append(f"### [[icon:lock]] {role.nome}")
             lines.append("")
             lines.append(f"**{_t('security.model_permission')}**: `{role.model_permission}`")
             if role.descricao:
@@ -5145,7 +5309,7 @@ class DocumentadorPBIP:
             lines.append(f"| {_t('security.col.table')} | {_t('security.col.rls')} | {_t('security.col.ols')} |")
             lines.append("|---|---|---|")
             for tp in role.table_permissions:
-                rls_cell = "✅" if tp.filtro_dax else "—"
+                rls_cell = "[[icon:check]]" if tp.filtro_dax else "—"
                 if tp.metadata_permission or tp.colunas_permissao:
                     ols_parts = []
                     if tp.metadata_permission:
@@ -5236,7 +5400,7 @@ class DocumentadorPBIP:
         return valor
 
     def _md_named_expressions(self) -> List[str]:
-        """🔧 Parâmetros e Expressões M — parametros e queries compartilhadas."""
+        """Parametros e Expressoes M - parametros e queries compartilhadas."""
         if not self.named_expressions:
             return []
         params = [ne for ne in self.named_expressions if ne.eh_parametro]
@@ -5247,7 +5411,7 @@ class DocumentadorPBIP:
         lines.append("")
 
         if params:
-            lines.append(f"### 🔧 {_t('named_expressions.params_heading')}")
+            lines.append(f"### [[icon:wrench]] {_t('named_expressions.params_heading')}")
             lines.append("")
             lines.append(
                 f"| {_t('named_expressions.col.name')} | {_t('named_expressions.col.type')} | "
@@ -5258,13 +5422,13 @@ class DocumentadorPBIP:
             for ne in params:
                 valor_resumo = self._resumo_valor_parametro(ne)
                 tipo = f"`{ne.tipo_parametro}`" if ne.tipo_parametro else "—"
-                obrig = "✅" if ne.obrigatorio else "—"
+                obrig = "[[icon:check]]" if ne.obrigatorio else "—"
                 grupo = f"`{ne.grupo_consulta}`" if ne.grupo_consulta else "—"
                 lines.append(f"| `{ne.nome}` | {tipo} | {obrig} | {valor_resumo} | {grupo} |")
             lines.append("")
 
         if outros:
-            lines.append(f"### 📜 {_t('named_expressions.queries_heading')}")
+            lines.append(f"### [[icon:scroll]] {_t('named_expressions.queries_heading')}")
             lines.append("")
             for ne in outros:
                 lines.append(f"#### {ne.nome}")
@@ -5292,6 +5456,9 @@ class DocumentadorPBIP:
             caminho_saida = self.caminho_projeto / f"{self.nome_projeto}_documentacao.md"
 
         markdown = self.gerar_documentacao()
+        # MD nao renderiza SVG inline da mesma forma que HTML; remove tokens
+        # [[icon:...]] para nao poluir o documento.
+        markdown = icons.remover_tokens_icone(markdown)
 
         with open(caminho_saida, 'w', encoding='utf-8-sig') as f:
             f.write(markdown)
@@ -5300,7 +5467,14 @@ class DocumentadorPBIP:
         return caminho_saida
 
     def _gerar_html_documentacao(self, auto_print: bool = False) -> str:
-        """Gera HTML imprimivel a partir da documentacao Markdown."""
+        """Gera HTML imprimivel a partir da documentacao Markdown.
+
+        Pipeline:
+          1. Renderiza markdown -> HTML basico (tables/fenced_code/toc).
+          2. Substitui tokens [[icon:NOME]] por SVG inline minimalista.
+          3. Embute CSS (cards, sticky header, dark mode, print headers,
+             code blocks com numeracao) e JS (mermaid, highlight, tema).
+        """
         try:
             import markdown
         except ImportError:
@@ -5308,54 +5482,263 @@ class DocumentadorPBIP:
 
         markdown_text = self.gerar_documentacao()
         html_body = markdown.markdown(markdown_text, extensions=['tables', 'fenced_code', 'toc'])
+        # O slugifier do python-markdown ve `[[icon:NOME]]` no heading e gera
+        # ids tipo "iconoverview-visao-geral". Limpa o prefixo `icon<nome>-`
+        # (NOME e composto so de letras minusculas e digitos, ate o primeiro
+        # `-`; nao matchea `iconoverview-visao-` por causa do `[a-z0-9]+`
+        # sem hifen). Roda ANTES de substituir os tokens pelo SVG.
+        html_body = re.sub(
+            r'(<h[1-6]\b[^>]*\sid=")icon[a-z0-9]+-',
+            r'\1',
+            html_body,
+        )
+        # Tokens [[icon:NOME]] -> SVG inline. ASCII puro -> nunca mojibake.
+        html_body = icons.substituir_icones_em_html(html_body)
         cor_primaria = self.branding.primary_color
         cor_secundaria = self.branding.secondary_color
         cor_clara = self.branding.light_color
         fact_tables = self._tabelas_fato_mermaid()
         fact_tables_js = json.dumps(fact_tables, ensure_ascii=True)
+        nome_projeto = html.escape(str(self.nome_projeto))
+        titulo_doc = html.escape(self.branding.document_title)
 
         css_style = """
+        :root {
+            --bg: #FFFFFF;
+            --fg: #2C3E50;
+            --fg-soft: #6C7A89;
+            --primary: #1A5276;
+            --secondary: #2980B9;
+            --accent: #3498DB;
+            --light: #EBF5FB;
+            --border: #EAECEE;
+            --row-alt: #F8F9F9;
+            --code-bg: #F2F4F4;
+            --code-fg: #C0392B;
+            --card-bg: #FFFFFF;
+            --card-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        }
+        [data-theme="dark"] {
+            --bg: #0F172A;
+            --fg: #E2E8F0;
+            --fg-soft: #94A3B8;
+            --primary: #60A5FA;
+            --secondary: #93C5FD;
+            --accent: #BFDBFE;
+            --light: #1E293B;
+            --border: #334155;
+            --row-alt: #1A2434;
+            --code-bg: #1E293B;
+            --code-fg: #FCA5A5;
+            --card-bg: #1A2434;
+            --card-shadow: 0 1px 3px rgba(0,0,0,0.4);
+        }
         html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
-        body { font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif; color: #2C3E50; line-height: 1.6; padding: 20px 40px; font-size: 10.5pt; }
-        h1, h2, h3, h4, h5 { color: #1A5276; font-weight: 600; margin-top: 1.5em; margin-bottom: 0.5em; page-break-after: avoid; }
-        h1 { border-bottom: 2px solid #2980B9; padding-bottom: 0.3em; font-size: 24pt; }
-        h2 { border-bottom: 1px solid #EAECEE; padding-bottom: 0.3em; font-size: 18pt; }
-        h3 { font-size: 14pt; color: #2980B9; }
-        h4 { font-size: 12pt; color: #1A5276; margin-top: 1.2em; }
-        /* h5 = nome de medida/coluna calculada. Destaque visual de "etiqueta"
-           para nao competir com o "Funcoes DAX usadas" do body que vem abaixo. */
-        h5 { font-size: 11.5pt; color: #1A5276; margin-top: 1.4em; margin-bottom: 0.4em;
-             padding: 6px 12px; background: #EBF5FB; border-left: 4px solid #2980B9;
+        body { font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+               color: var(--fg); background: var(--bg);
+               line-height: 1.6; padding: 20px 40px; font-size: 10.5pt;
+               transition: background 0.2s ease, color 0.2s ease; }
+        h1, h2, h3, h4, h5 { color: var(--primary); font-weight: 600;
+                              margin-top: 1.5em; margin-bottom: 0.5em;
+                              page-break-after: avoid; }
+        h1 { border-bottom: 2px solid var(--secondary); padding-bottom: 0.3em; font-size: 24pt; }
+        h2 { border-bottom: 1px solid var(--border); padding-bottom: 0.3em; font-size: 18pt; }
+        h3 { font-size: 14pt; color: var(--secondary); }
+        h4 { font-size: 12pt; color: var(--primary); margin-top: 1.2em; }
+        h5 { font-size: 11.5pt; color: var(--primary); margin-top: 1.4em; margin-bottom: 0.4em;
+             padding: 6px 12px; background: var(--light); border-left: 4px solid var(--secondary);
              border-radius: 0 4px 4px 0; font-family: 'Consolas', 'Courier New', monospace; }
-        table { border-collapse: collapse; width: 100%; margin: 1.5em 0; font-size: 9.5pt; box-shadow: 0 1px 3px rgba(0,0,0,0.1); table-layout: auto; word-break: break-word; }
-        th { background-color: #2980B9; color: white; padding: 10px 12px; text-align: left; font-weight: 600; }
-        td { border-bottom: 1px solid #EAECEE; padding: 10px 12px; }
-        tr:nth-child(even) { background-color: #F8F9F9; }
+
+        /* ---------- icones SVG inline ---------- */
+        .icon { width: 1em; height: 1em; vertical-align: -0.15em;
+                margin-right: 0.4em; display: inline-block; flex-shrink: 0; }
+        h1 > .icon, h2 > .icon, h3 > .icon, h4 > .icon { opacity: 0.78; }
+        td .icon, th .icon { margin-right: 0.25em; }
+
+        /* ---------- tabelas ---------- */
+        table { border-collapse: collapse; width: 100%; margin: 1.5em 0;
+                font-size: 9.5pt; box-shadow: var(--card-shadow);
+                table-layout: auto; word-break: break-word; background: var(--card-bg); }
+        th { background-color: var(--secondary); color: white;
+             padding: 10px 12px; text-align: left; font-weight: 600; }
+        td { border-bottom: 1px solid var(--border); padding: 10px 12px; }
+        tr:nth-child(even) { background-color: var(--row-alt); }
         tr { page-break-inside: avoid; }
-        code { font-family: 'Consolas', 'Courier New', monospace; background-color: #F2F4F4; padding: 2px 5px; border-radius: 4px; font-size: 9pt; color: #C0392B; word-break: break-all; }
-        pre code { display: block; padding: 15px; border-left: 4px solid #2980B9; overflow-x: auto; line-height: 1.4; white-space: pre-wrap; word-wrap: break-word; border-radius: 0 6px 6px 0; }
-        blockquote { border-left: 4px solid #3498DB; background: #EBF5FB; padding: 12px 16px; margin: 1.5em 0; color: #2C3E50; border-radius: 0 4px 4px 0; }
-        hr { border: 0; height: 1px; background: #EAECEE; margin: 2em 0; }
-        pre code.hljs { border-left: 4px solid #2980B9; border-radius: 0 6px 6px 0; }
-        :not(pre) > code { background-color: #F2F4F4 !important; color: #C0392B !important; padding: 2px 5px; border-radius: 4px; font-size: 9pt; }
+        /* sticky header em tabelas grandes (>= 10 linhas): so na TELA.
+           Em @media print sticky vira `relative` e o thead aparece flutuando
+           no meio da pagina (bug conhecido em paged media). Tratado abaixo. */
+        @media screen {
+            .table-large thead th { position: sticky; top: 0; z-index: 2;
+                                     box-shadow: 0 1px 0 rgba(0,0,0,0.15); }
+        }
+
+        /* ---------- code ---------- */
+        code { font-family: 'Consolas', 'Courier New', monospace;
+               background-color: var(--code-bg); padding: 2px 5px;
+               border-radius: 4px; font-size: 9pt; color: var(--code-fg);
+               word-break: break-all; }
+        pre { position: relative; margin: 1.2em 0; }
+        pre code { display: block; padding: 15px 15px 15px 15px;
+                   border-left: 4px solid var(--secondary); overflow-x: auto;
+                   line-height: 1.5; white-space: pre; word-wrap: normal;
+                   border-radius: 0 6px 6px 0; tab-size: 4; }
+        /* No print, scroll horizontal nao existe. Quebra linhas longas
+           preservando indentacao (pre-wrap) e quebra qualquer token (URLs,
+           strings DAX/M coladas) com overflow-wrap pra garantir que nada
+           seja cortado pela margem direita da pagina. */
+        @media print {
+            pre code { white-space: pre-wrap !important;
+                       word-wrap: break-word !important;
+                       overflow-wrap: anywhere !important;
+                       overflow-x: visible !important;
+                       font-size: 8pt !important;
+                       line-height: 1.35 !important; }
+            pre code .line-num { font-size: 7.5pt !important; }
+        }
+        pre code .line-num { display: inline-block; width: 28px;
+                              padding-right: 14px;
+                              color: var(--fg-soft); opacity: 0.55;
+                              text-align: right; user-select: none;
+                              border-right: 1px solid var(--border);
+                              margin-right: 12px; font-size: 8.5pt; }
+        pre code.hljs { border-left: 4px solid var(--secondary); border-radius: 0 6px 6px 0; }
+        :not(pre) > code { background-color: var(--code-bg) !important;
+                           color: var(--code-fg) !important;
+                           padding: 2px 5px; border-radius: 4px; font-size: 9pt; }
+        blockquote { border-left: 4px solid var(--secondary); background: var(--light);
+                     padding: 12px 16px; margin: 1.5em 0; color: var(--fg);
+                     border-radius: 0 4px 4px 0; }
+        hr { border: 0; height: 1px; background: var(--border); margin: 2em 0; }
+        a { color: var(--secondary); }
+
+        /* ---------- mermaid ---------- */
         .language-mermaid { white-space: pre-wrap; word-wrap: break-word; font-family: 'Consolas', monospace; }
         .mermaid { display: flex; justify-content: center; margin: 2em 0; page-break-inside: avoid; }
-        .mermaid .fact-table rect { fill: #2980B9; stroke: #1A5276; stroke-width: 1.5px; }
+        .mermaid .fact-table rect { fill: var(--secondary); stroke: var(--primary); stroke-width: 1.5px; }
         .mermaid .fact-table text { fill: #FFFFFF; font-weight: 600; }
-        .cover-page { display: flex; flex-direction: column; justify-content: center; align-items: center; min-height: 85vh; text-align: center; padding: 2em 0; }
-        .cover-page h1.cover-title { font-size: 36pt; border-bottom: 3px solid #2980B9; padding-bottom: 0.4em; margin-bottom: 0.6em; color: #1A5276; }
+
+        /* ---------- capa ---------- */
+        .cover-page { display: flex; flex-direction: column; justify-content: center;
+                      align-items: center; min-height: 92vh; text-align: center;
+                      padding: 2em 0; position: relative; }
+        .cover-page h1.cover-title { font-size: 32pt; border-bottom: 3px solid var(--secondary);
+                                      padding-bottom: 0.4em; margin-bottom: 0.4em;
+                                      color: var(--primary); }
+        .cover-subtitle { font-size: 13pt; color: var(--fg-soft); font-weight: 400;
+                          letter-spacing: 0.08em; text-transform: uppercase;
+                          margin-bottom: 2em; }
         .cover-logo { margin-bottom: 1.5em; }
-        .cover-project { font-size: 20pt; color: #2C3E50; font-weight: 600; margin: 0.3em 0; }
-        .cover-date { font-size: 12pt; color: #7F8C8D; margin-top: 1em; }
+        .cover-project { font-size: 24pt; color: var(--primary); font-weight: 600;
+                         margin: 0.5em 0; }
+        .cover-meta { margin-top: 3em; padding: 18px 28px; border: 1px solid var(--border);
+                      border-radius: 8px; background: var(--card-bg);
+                      box-shadow: var(--card-shadow); min-width: 360px; }
+        .cover-meta-row { display: flex; justify-content: space-between;
+                          padding: 6px 0; font-size: 10pt; gap: 30px; }
+        .cover-meta-row + .cover-meta-row { border-top: 1px dashed var(--border); }
+        .cover-meta-label { color: var(--fg-soft); font-weight: 500; }
+        .cover-meta-value { color: var(--fg); font-weight: 600; }
+        .cover-badge { position: absolute; bottom: 20px; left: 50%;
+                       transform: translateX(-50%); font-size: 8.5pt;
+                       color: var(--fg-soft); letter-spacing: 0.04em; }
         .page-break { height: 0; margin: 0; padding: 0; border: none; }
+
+        /* ---------- sumario executivo ---------- */
+        .exec-summary { background: linear-gradient(135deg, var(--light), var(--card-bg));
+                        border: 1px solid var(--border); border-radius: 10px;
+                        padding: 24px 28px; margin: 1.5em 0; box-shadow: var(--card-shadow); }
+        .exec-summary h3 { margin-top: 0; border: 0; color: var(--primary); }
+        .exec-summary p { margin: 0.4em 0; }
+        .exec-highlights { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+                           gap: 12px; margin-top: 1em; }
+        .exec-highlight { background: var(--card-bg); border-radius: 6px;
+                          padding: 12px 14px; border-left: 3px solid var(--secondary); }
+        .exec-highlight .label { font-size: 8.5pt; color: var(--fg-soft);
+                                  text-transform: uppercase; letter-spacing: 0.06em; }
+        .exec-highlight .value { font-size: 13pt; color: var(--primary); font-weight: 600; }
+
+        /* ---------- cards (Visao Geral) ---------- */
+        .overview-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+                           gap: 16px; margin: 1.5em 0; }
+        .card { background: var(--card-bg); border: 1px solid var(--border);
+                border-radius: 10px; padding: 18px 16px;
+                box-shadow: var(--card-shadow); text-align: center;
+                page-break-inside: avoid; transition: transform 0.15s ease; }
+        .card-icon { color: var(--secondary); font-size: 22pt;
+                     display: inline-flex; align-items: center; justify-content: center;
+                     width: 44px; height: 44px; background: var(--light);
+                     border-radius: 50%; margin: 0 auto 10px; }
+        .card-icon .icon { width: 1em; height: 1em; margin: 0; }
+        .card-value { font-size: 22pt; font-weight: 700; color: var(--primary);
+                       line-height: 1; }
+        .card-label { font-size: 9pt; color: var(--fg-soft); margin-top: 6px;
+                       text-transform: uppercase; letter-spacing: 0.06em; }
+
+        /* ---------- estatisticas por medida (chips) ---------- */
+        .measure-stats { display: flex; flex-wrap: wrap; gap: 8px;
+                          margin: 0.6em 0 1em 0; }
+        .measure-stats span { background: var(--light); color: var(--fg-soft);
+                               padding: 3px 10px; border-radius: 12px;
+                               font-size: 8.5pt; font-weight: 500;
+                               letter-spacing: 0.02em; }
+        .measure-stats span strong { color: var(--primary); font-weight: 700;
+                                      margin-right: 3px; }
+
+        /* ---------- toggle tema (rodape fixo no canto) ---------- */
+        .theme-toggle { position: fixed; bottom: 20px; right: 20px;
+                         width: 40px; height: 40px; border-radius: 50%;
+                         background: var(--card-bg); border: 1px solid var(--border);
+                         box-shadow: var(--card-shadow); cursor: pointer;
+                         display: flex; align-items: center; justify-content: center;
+                         color: var(--primary); z-index: 100;
+                         transition: transform 0.15s ease, background 0.2s ease; }
+        .theme-toggle:hover { transform: scale(1.08); }
+        .theme-toggle .icon { width: 18px; height: 18px; margin: 0; }
+        @media print { .theme-toggle { display: none !important; } }
+
+        /* ---------- print ---------- */
         @media print {
-            @page { size: A4; margin: 2cm; }
-            body { padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            @page {
+                size: A4;
+                margin: 2.2cm 2cm 2cm 2cm;
+                @top-right {
+                    content: "__DOC_TITLE__ - __PROJ_NAME__";
+                    font-family: 'Inter', sans-serif;
+                    font-size: 8.5pt;
+                    color: #888;
+                }
+                @bottom-right {
+                    content: "Pagina " counter(page) " de " counter(pages);
+                    font-family: 'Inter', sans-serif;
+                    font-size: 8.5pt;
+                    color: #888;
+                }
+                @bottom-left {
+                    content: "__DOC_TITLE__";
+                    font-family: 'Inter', sans-serif;
+                    font-size: 8.5pt;
+                    color: #888;
+                }
+            }
+            @page :first { @top-right { content: ""; } @bottom-right { content: ""; } @bottom-left { content: ""; } }
+            body { padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact;
+                   background: white !important; color: black !important; }
             p, li { orphans: 3; widows: 3; }
             pre { page-break-inside: avoid; }
             a[href^="http"]:after { content: " (" attr(href) ")"; font-size: 80%; color: #555; }
             a { color: inherit; text-decoration: none; }
             .page-break { page-break-after: always; break-after: page; }
+            .theme-toggle { display: none; }
+            /* Tabelas grandes precisam quebrar entre paginas. `display: table-header-group`
+               faz o navegador repetir o thead no topo de cada pagina automaticamente.
+               Sem isso, sticky vira posicionamento "flutuante" no PDF e o header aparece
+               sobreposto a linhas no meio do documento. */
+            table { page-break-inside: auto; }
+            thead { display: table-header-group; }
+            tfoot { display: table-footer-group; }
+            tr { page-break-inside: avoid; page-break-after: auto; }
+            .table-large thead th { position: static !important;
+                                     box-shadow: none !important; }
         }
         """
         css_style = (
@@ -5364,24 +5747,37 @@ class DocumentadorPBIP:
             .replace("#2980B9", cor_secundaria)
             .replace("#3498DB", cor_secundaria)
             .replace("#EBF5FB", cor_clara)
+            .replace("__DOC_TITLE__", self.branding.document_title.replace('"', "'"))
+            .replace("__PROJ_NAME__", str(self.nome_projeto).replace('"', "'"))
         )
 
-        print_script = ""
+        svg_moon = icons.render_icon("moon")
+        svg_sun = icons.render_icon("sun")
 
         return f"""
         <!DOCTYPE html>
-        <html>
+        <html lang="pt-BR">
         <head>
             <meta charset="utf-8">
-            <title>{html.escape(self.branding.document_title)} - {html.escape(str(self.nome_projeto))}</title>
+            <title>{titulo_doc} - {nome_projeto}</title>
             <link rel="preconnect" href="https://fonts.googleapis.com">
             <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-            <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+            <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
             <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-light.min.css">
             <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
             <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/sql.min.js"></script>
             <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/powershell.min.js"></script>
             <style>{css_style}</style>
+            <script>
+                // Aplica tema salvo o mais cedo possivel (antes do render) para
+                // evitar "flash" branco quando o usuario tem dark mode ativo.
+                (function() {{
+                    try {{
+                        const saved = localStorage.getItem('bidoc-theme');
+                        if (saved === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+                    }} catch (e) {{}}
+                }})();
+            </script>
             <script type="module">
                 import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
                 mermaid.initialize({{ startOnLoad: true, theme: 'default' }});
@@ -5408,42 +5804,73 @@ class DocumentadorPBIP:
 
                     hljs.highlightAll();
 
+                    // Numeracao de linha em blocos de codigo. Pula mermaid e blocos curtos
+                    // (< 3 linhas). Roda apos highlight para nao bagunca o tokenizer.
+                    document.querySelectorAll("pre > code").forEach(block => {{
+                        if (block.classList.contains("language-mermaid")) return;
+                        const html = block.innerHTML;
+                        const lines = html.split(/\\r?\\n/);
+                        while (lines.length > 1 && lines[lines.length - 1].trim() === "") lines.pop();
+                        if (lines.length < 3) return;
+                        const pad = String(lines.length).length;
+                        const numbered = lines.map((line, i) => {{
+                            const num = String(i + 1).padStart(pad, ' ');
+                            return `<span class="line-num">${{num}}</span>${{line}}`;
+                        }}).join("\\n");
+                        block.innerHTML = numbered;
+                    }});
+
+                    document.querySelectorAll("table").forEach(t => {{
+                        const rows = t.querySelectorAll("tbody tr").length;
+                        if (rows >= 10) t.classList.add("table-large");
+                    }});
+
                     if (factTables.size > 0) {{
                         const applyFactHighlight = () => {{
                             const entities = document.querySelectorAll(".mermaid svg g.entity");
-                            if (!entities.length) {{
-                                return false;
-                            }}
+                            if (!entities.length) return false;
                             entities.forEach(entity => {{
                                 const label = entity.querySelector("text");
-                                if (!label) {{
-                                    return;
-                                }}
+                                if (!label) return;
                                 const name = (label.textContent || "").trim();
-                                if (factTables.has(name)) {{
-                                    entity.classList.add("fact-table");
-                                }}
+                                if (factTables.has(name)) entity.classList.add("fact-table");
                             }});
                             return true;
                         }};
-
                         const waitForMermaid = (attempt = 0) => {{
-                            if (applyFactHighlight()) {{
-                                return;
-                            }}
-                            if (attempt < 30) {{
-                                setTimeout(() => waitForMermaid(attempt + 1), 150);
-                            }}
+                            if (applyFactHighlight()) return;
+                            if (attempt < 30) setTimeout(() => waitForMermaid(attempt + 1), 150);
                         }};
-
                         waitForMermaid();
                     }}
-                }});
 
-                {print_script}
+                    const btn = document.getElementById('theme-toggle');
+                    if (btn) {{
+                        const svgMoon = `{svg_moon}`;
+                        const svgSun = `{svg_sun}`;
+                        const updateBtn = () => {{
+                            const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+                            btn.innerHTML = dark ? svgSun : svgMoon;
+                            btn.setAttribute('aria-label', dark ? 'Mudar para tema claro' : 'Mudar para tema escuro');
+                        }};
+                        updateBtn();
+                        btn.addEventListener('click', () => {{
+                            const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+                            if (dark) {{
+                                document.documentElement.removeAttribute('data-theme');
+                                try {{ localStorage.setItem('bidoc-theme', 'light'); }} catch (e) {{}}
+                            }} else {{
+                                document.documentElement.setAttribute('data-theme', 'dark');
+                                try {{ localStorage.setItem('bidoc-theme', 'dark'); }} catch (e) {{}}
+                            }}
+                            updateBtn();
+                        }});
+                    }}
+                }});
             </script>
         </head>
         <body>
+            <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Alternar tema"></button>
             {html_body}
         </body>
         </html>
@@ -5490,6 +5917,13 @@ class DocumentadorPBIP:
 
         if caminho_saida is None:
             caminho_saida = self.caminho_projeto / f"{self.nome_projeto}_documentacao.docx"
+
+        # DOCX nao renderiza SVG inline. Wrappa _t do modulo i18n para
+        # strippar [[icon:NOME]] de qualquer string traduzida. So usa esse
+        # alias se houver mesmo um token (rapido).
+        from i18n import t as _t_real
+        def _t(key: str, **kw):  # noqa: F811 — sombreamento intencional, escopo local
+            return icons.remover_tokens_icone(_t_real(key, **kw))
 
         doc = Document()
 
@@ -6684,7 +7118,7 @@ class DocumentadorPBIP:
                 # Tabela resumo de permissions
                 rows_sec = []
                 for tp in role.table_permissions:
-                    rls_cell = "✅" if tp.filtro_dax else "—"
+                    rls_cell = "✓" if tp.filtro_dax else "—"
                     if tp.metadata_permission or tp.colunas_permissao:
                         ols_parts = []
                         if tp.metadata_permission:
@@ -6726,7 +7160,7 @@ class DocumentadorPBIP:
                     rows_p.append([
                         ne.nome,
                         ne.tipo_parametro or "—",
-                        "✅" if ne.obrigatorio else "—",
+                        "✓" if ne.obrigatorio else "—",
                         valor,
                         ne.grupo_consulta or "—",
                     ])

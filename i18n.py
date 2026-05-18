@@ -28,7 +28,7 @@ _PT_BR: Dict[str, str] = {
     # -------------------------------------------------------------------
     # Cabecalhos principais do documento (Markdown ## headings)
     # -------------------------------------------------------------------
-    "doc.toc.title": "📑 Índice",
+    "doc.toc.title": "[[icon:toc]] Índice",
     "doc.toc.overview": "Visão Geral",
     "doc.toc.dictionary": "Dicionário de Dados e Termos",
     "doc.toc.pages": "Páginas do Relatório",
@@ -39,33 +39,54 @@ _PT_BR: Dict[str, str] = {
     "doc.toc.custom_visuals": "Visuais Personalizados",
     "doc.toc.image_resources": "Recursos de Imagem",
 
-    "doc.section.overview": "📈 Visão Geral",
-    "doc.section.dictionary": "Dicionário de Dados e Termos",
-    "doc.section.glossary_dax": "📐 Glossário DAX",
-    "doc.section.pages": "📄 Páginas do Relatório",
-    "doc.section.model": "🗂️ Modelo de Dados",
+    "doc.section.overview": "[[icon:overview]] Visão Geral",
+    "doc.section.dictionary": "[[icon:dictionary]] Dicionário de Dados e Termos",
+    "doc.section.glossary_dax": "[[icon:glossary]] Glossário DAX",
+    "doc.section.pages": "[[icon:pages]] Páginas do Relatório",
+    "doc.section.model": "[[icon:model]] Modelo de Dados",
     "doc.section.er_diagram": "Diagrama de Relacionamentos (ER)",
-    "doc.section.relationships_list": "🔗 Lista de Relacionamentos",
-    "doc.section.query_groups": "📂 Grupos de Consulta",
-    "doc.section.tables_summary": "📊 Resumo das Tabelas",
-    "doc.section.tables_in_model": "📁 Tabelas do Modelo",
+    "doc.section.relationships_list": "[[icon:link]] Lista de Relacionamentos",
+    "doc.section.query_groups": "[[icon:folder-open]] Grupos de Consulta",
+    "doc.section.tables_summary": "[[icon:chart]] Resumo das Tabelas",
+    "doc.section.tables_in_model": "[[icon:tables]] Tabelas do Modelo",
     "doc.section.tables": "Tabelas",
 
     # -------------------------------------------------------------------
     # Capa
     # -------------------------------------------------------------------
     "cover.document_title_default": "Documentação Power BI",
-    "cover.created_on": "Data de Criação",
+    "cover.created_on": "Data de criação",
+    "cover.subtitle": "Modelo Semântico e Camada de Relatório",
+    "cover.project_updated": "Última atualização do projeto",
+    "cover.tables_count": "Tabelas no modelo",
+    "cover.measures_count": "Medidas DAX",
+    "cover.generated_by": "Gerado por",
+
+    # -------------------------------------------------------------------
+    # Sumario executivo (pagina 2)
+    # -------------------------------------------------------------------
+    "exec.title": "Sumário Executivo",
+    "exec.intro": "Visão geral do conteúdo deste documento, pensada para leitura rápida por gestores e stakeholders não-técnicos.",
+    "exec.what.title": "O que este modelo entrega",
+    "exec.what.body": "Conjunto de {tables} tabelas e {measures} medidas DAX organizadas em {facts} fato(s) e {dims} dimensão(ões), apresentadas em {pages} página(s) de relatório.",
+    "exec.what.body_no_dim": "Conjunto de {tables} tabelas e {measures} medidas DAX, apresentadas em {pages} página(s) de relatório.",
+    "exec.highlight.tables": "Tabelas",
+    "exec.highlight.measures": "Medidas DAX",
+    "exec.highlight.relationships": "Relacionamentos",
+    "exec.highlight.pages": "Páginas",
+    "exec.highlight.last_update": "Atualização do projeto",
+    "exec.scope.title": "Escopo da documentação",
+    "exec.scope.body": "Este documento abrange o modelo semântico (tabelas, colunas, medidas, relacionamentos, regras Power Query), o glossário de negócio inferido dos metadados, o glossário das funções DAX utilizadas e o catálogo de páginas do relatório com seus filtros.",
 
     # -------------------------------------------------------------------
     # Tabela de visao geral (cards de contadores)
     # -------------------------------------------------------------------
-    "overview.col.tables": "📁 Tabelas",
-    "overview.col.measures": "📐 Medidas",
-    "overview.col.columns": "🔢 Colunas",
-    "overview.col.calc_columns": "🧮 Calculadas",
-    "overview.col.relationships": "🔗 Relacionamentos",
-    "overview.col.pages": "📄 Páginas",
+    "overview.col.tables": "Tabelas",
+    "overview.col.measures": "Medidas",
+    "overview.col.columns": "Colunas",
+    "overview.col.calc_columns": "Calculadas",
+    "overview.col.relationships": "Relacionamentos",
+    "overview.col.pages": "Páginas",
     "overview.dimensional_label": "**Modelo dimensional**",
 
     # Plurais para modelo dimensional
@@ -80,6 +101,10 @@ _PT_BR: Dict[str, str] = {
     # Dicionario de termos
     # -------------------------------------------------------------------
     "dict.intro": "Leitura offline inferida a partir dos metadados do PBIP. O dicionário não usa dados reais das tabelas e deve ser validado com a área de negócio.",
+    "dict.subtitle.business": "Termos de Negócio",
+    "dict.subtitle.business_desc": "Conceitos do domínio — indicadores, entidades, períodos e atributos que falam a linguagem da área usuária.",
+    "dict.subtitle.technical": "Termos Técnicos",
+    "dict.subtitle.technical_desc": "Vocabulário interno de transformação — regras Power Query, padrões de etapas e identificadores estruturais.",
     "dict.col.term": "Termo",
     "dict.col.frequency": "Ocorrências",
     "dict.col.category": "Categoria",
@@ -108,6 +133,15 @@ _PT_BR: Dict[str, str] = {
     "glossary_dax.col.business_reading": "Leitura de negócio",
 
     "leitura_dax.functions_used": "**Funções DAX usadas**",
+
+    # Estatisticas exibidas em cada medida (linha de chips abaixo do nome)
+    "measure.stat.lines": "linhas DAX",
+    "measure.stat.function": "função",
+    "measure.stat.functions": "funções",
+    "measure.stat.dependency": "dependência",
+    "measure.stat.dependencies": "dependências",
+    "measure.stat.table": "tabela referenciada",
+    "measure.stat.tables": "tabelas referenciadas",
 
     # -------------------------------------------------------------------
     # Linhagem de medidas
@@ -147,12 +181,12 @@ _PT_BR: Dict[str, str] = {
     "table.col.summarization": "Sumarização",
     "table.col.hidden": "Oculta",
 
-    "table.section.columns": "📋 Colunas",
+    "table.section.columns": "[[icon:columns]] Colunas",
     "table.section.calc_columns_summary": "Colunas Calculadas (Resumo)",
     "table.section.calc_columns_dax": "Colunas Calculadas - Código DAX",
     "table.section.measures_summary": "Medidas (Resumo)",
     "table.section.measures_dax": "Medidas - Código DAX",
-    "table.section.source_data": "💾 Fonte de Dados",
+    "table.section.source_data": "[[icon:save]] Fonte de Dados",
 
     "table.measure.col.name": "Nome",
     "table.measure.col.type": "Tipo",
@@ -162,17 +196,17 @@ _PT_BR: Dict[str, str] = {
     "table.calc.col.type": "Tipo",
     "table.calc.col.format": "Formato",
 
-    "table.status.visible": "🟢 Visível",
-    "table.status.hidden": "🔴 Oculta",
-    "table.refresh.yes": "✅ Sim",
-    "table.refresh.no": "❌ Não",
+    "table.status.visible": "[[icon:eye]] Visível",
+    "table.status.hidden": "[[icon:lock]] Oculta",
+    "table.refresh.yes": "[[icon:check]] Sim",
+    "table.refresh.no": "[[icon:x]] Não",
     "table.yes": "Sim",
     "table.no": "Não",
 
-    "table.source.import": "📥 Importação",
-    "table.source.dax": "📝 DAX",
-    "table.source.sql": "🗃️ SQL",
-    "table.source.oracle": "🔷 Oracle",
+    "table.source.import": "[[icon:import]] Importação",
+    "table.source.dax": "[[icon:dax]] DAX",
+    "table.source.sql": "[[icon:database]] SQL",
+    "table.source.oracle": "[[icon:database]] Oracle",
     "table.source.mode_label": "**Modo**",
     "table.source.group_label": "**Grupo**",
     "table.source.code_m": "**Código fonte (Power Query M)**",
@@ -218,13 +252,13 @@ _PT_BR: Dict[str, str] = {
     # Paginas / report
     # -------------------------------------------------------------------
     "pages.total": "**Total de páginas: {n}**",
-    "pages.empty_thin_report": "⚠️ Nenhuma página encontrada localmente. Este projeto pode ser um **relatório remoto** (thin report) onde as páginas ficam armazenadas no serviço Power BI.",
+    "pages.empty_thin_report": "[[icon:warning]] Nenhuma página encontrada localmente. Este projeto pode ser um **relatório remoto** (thin report) onde as páginas ficam armazenadas no serviço Power BI.",
     "pages.col.idx": "#",
     "pages.col.name": "Nome",
     "pages.col.type": "Tipo",
     "pages.col.dimensions": "Dimensões",
     "pages.col.filters": "Filtros",
-    "pages.section.filters": "🔍 Filtros de Página",
+    "pages.section.filters": "[[icon:filter]] Filtros de Página",
     "pages.filter.col.table": "Tabela",
     "pages.filter.col.column": "Coluna",
     "pages.filter.col.type": "Tipo",
@@ -459,7 +493,7 @@ _PT_BR: Dict[str, str] = {
     # -------------------------------------------------------------------
     # v0.9.0 — Calculation Groups
     # -------------------------------------------------------------------
-    "doc.section.calc_groups": "🧮 Grupos de Cálculo",
+    "doc.section.calc_groups": "[[icon:calc]] Grupos de Cálculo",
     "calc_groups.intro": "Grupos de cálculo permitem aplicar variações dinâmicas (ex: YTD, YoY, % Total) sobre medidas existentes, sem precisar duplicá-las.",
     "calc_groups.precedence": "Precedência",
     "calc_groups.no_items": "Nenhum item de cálculo definido.",
@@ -471,7 +505,7 @@ _PT_BR: Dict[str, str] = {
     # -------------------------------------------------------------------
     # v0.9.0 — Perspectives
     # -------------------------------------------------------------------
-    "doc.section.perspectives": "👁️ Perspectivas",
+    "doc.section.perspectives": "[[icon:eye]] Perspectivas",
     "perspectives.intro": "Perspectivas são visões reduzidas do modelo para diferentes audiências. Mostram apenas um subconjunto de tabelas, colunas e medidas — sem restringir acesso aos dados.",
     "perspectives.empty": "Perspectiva vazia (sem tabelas declaradas).",
     "perspectives.whole_table": "tabela inteira",
@@ -487,7 +521,7 @@ _PT_BR: Dict[str, str] = {
     # -------------------------------------------------------------------
     # v0.9.0 — Security (RLS + OLS)
     # -------------------------------------------------------------------
-    "doc.section.security": "🔒 Segurança (RLS / OLS)",
+    "doc.section.security": "[[icon:lock]] Segurança (RLS / OLS)",
     "security.intro": "Roles de segurança definem **quem vê o quê**. RLS (Row-Level Security) filtra linhas por usuário; OLS (Object-Level Security) restringe metadados de colunas.",
     "security.model_permission": "Permissão no modelo",
     "security.members": "Membros",
@@ -504,7 +538,7 @@ _PT_BR: Dict[str, str] = {
     # -------------------------------------------------------------------
     # v0.9.0 — Named Expressions (parametros M + queries compartilhadas)
     # -------------------------------------------------------------------
-    "doc.section.named_expressions": "🔧 Parâmetros e Expressões M",
+    "doc.section.named_expressions": "[[icon:wrench]] Parâmetros e Expressões M",
     "named_expressions.intro": "Parâmetros e expressões compartilhadas declarados no nível do modelo. Parâmetros M (`IsParameterQuery=true`) podem ser editados sem alterar o código.",
     "named_expressions.params_heading": "Parâmetros",
     "named_expressions.queries_heading": "Expressões compartilhadas",
@@ -527,7 +561,7 @@ _EN_US: Dict[str, str] = {
     # -------------------------------------------------------------------
     # Document headings (Markdown ## headings)
     # -------------------------------------------------------------------
-    "doc.toc.title": "📑 Table of Contents",
+    "doc.toc.title": "[[icon:toc]] Table of Contents",
     "doc.toc.overview": "Overview",
     "doc.toc.dictionary": "Data Dictionary and Terms",
     "doc.toc.pages": "Report Pages",
@@ -538,16 +572,16 @@ _EN_US: Dict[str, str] = {
     "doc.toc.custom_visuals": "Custom Visuals",
     "doc.toc.image_resources": "Image Resources",
 
-    "doc.section.overview": "📈 Overview",
-    "doc.section.dictionary": "Data Dictionary and Terms",
-    "doc.section.glossary_dax": "📐 DAX Glossary",
-    "doc.section.pages": "📄 Report Pages",
-    "doc.section.model": "🗂️ Data Model",
+    "doc.section.overview": "[[icon:overview]] Overview",
+    "doc.section.dictionary": "[[icon:dictionary]] Data Dictionary and Terms",
+    "doc.section.glossary_dax": "[[icon:glossary]] DAX Glossary",
+    "doc.section.pages": "[[icon:pages]] Report Pages",
+    "doc.section.model": "[[icon:model]] Data Model",
     "doc.section.er_diagram": "Relationship Diagram (ER)",
-    "doc.section.relationships_list": "🔗 Relationships List",
-    "doc.section.query_groups": "📂 Query Groups",
-    "doc.section.tables_summary": "📊 Tables Summary",
-    "doc.section.tables_in_model": "📁 Model Tables",
+    "doc.section.relationships_list": "[[icon:link]] Relationships List",
+    "doc.section.query_groups": "[[icon:folder-open]] Query Groups",
+    "doc.section.tables_summary": "[[icon:chart]] Tables Summary",
+    "doc.section.tables_in_model": "[[icon:tables]] Model Tables",
     "doc.section.tables": "Tables",
 
     # -------------------------------------------------------------------
@@ -555,16 +589,37 @@ _EN_US: Dict[str, str] = {
     # -------------------------------------------------------------------
     "cover.document_title_default": "Power BI Documentation",
     "cover.created_on": "Created on",
+    "cover.subtitle": "Semantic Model and Report Layer",
+    "cover.project_updated": "Last project update",
+    "cover.tables_count": "Tables in model",
+    "cover.measures_count": "DAX measures",
+    "cover.generated_by": "Generated by",
+
+    # -------------------------------------------------------------------
+    # Executive summary (page 2)
+    # -------------------------------------------------------------------
+    "exec.title": "Executive Summary",
+    "exec.intro": "High-level overview of this document, designed for quick reading by managers and non-technical stakeholders.",
+    "exec.what.title": "What this model delivers",
+    "exec.what.body": "A set of {tables} tables and {measures} DAX measures organized into {facts} fact(s) and {dims} dimension(s), presented across {pages} report page(s).",
+    "exec.what.body_no_dim": "A set of {tables} tables and {measures} DAX measures, presented across {pages} report page(s).",
+    "exec.highlight.tables": "Tables",
+    "exec.highlight.measures": "DAX measures",
+    "exec.highlight.relationships": "Relationships",
+    "exec.highlight.pages": "Pages",
+    "exec.highlight.last_update": "Project update",
+    "exec.scope.title": "Documentation scope",
+    "exec.scope.body": "This document covers the semantic model (tables, columns, measures, relationships, Power Query rules), the business glossary inferred from metadata, the DAX function glossary used, and the report page catalog with filters.",
 
     # -------------------------------------------------------------------
     # Overview counters table
     # -------------------------------------------------------------------
-    "overview.col.tables": "📁 Tables",
-    "overview.col.measures": "📐 Measures",
-    "overview.col.columns": "🔢 Columns",
-    "overview.col.calc_columns": "🧮 Calculated",
-    "overview.col.relationships": "🔗 Relationships",
-    "overview.col.pages": "📄 Pages",
+    "overview.col.tables": "Tables",
+    "overview.col.measures": "Measures",
+    "overview.col.columns": "Columns",
+    "overview.col.calc_columns": "Calculated",
+    "overview.col.relationships": "Relationships",
+    "overview.col.pages": "Pages",
     "overview.dimensional_label": "**Dimensional model**",
 
     # Plurals for dimensional model summary
@@ -579,6 +634,10 @@ _EN_US: Dict[str, str] = {
     # Data dictionary
     # -------------------------------------------------------------------
     "dict.intro": "Offline reading inferred from PBIP metadata. The dictionary does not use real table data and should be validated with the business area.",
+    "dict.subtitle.business": "Business Terms",
+    "dict.subtitle.business_desc": "Domain concepts — indicators, entities, periods and attributes spoken in business language.",
+    "dict.subtitle.technical": "Technical Terms",
+    "dict.subtitle.technical_desc": "Internal transformation vocabulary — Power Query rules, step patterns and structural identifiers.",
     "dict.col.term": "Term",
     "dict.col.frequency": "Occurrences",
     "dict.col.category": "Category",
@@ -607,6 +666,14 @@ _EN_US: Dict[str, str] = {
     "glossary_dax.col.business_reading": "Business reading",
 
     "leitura_dax.functions_used": "**DAX functions used**",
+
+    "measure.stat.lines": "DAX lines",
+    "measure.stat.function": "function",
+    "measure.stat.functions": "functions",
+    "measure.stat.dependency": "dependency",
+    "measure.stat.dependencies": "dependencies",
+    "measure.stat.table": "referenced table",
+    "measure.stat.tables": "referenced tables",
 
     # -------------------------------------------------------------------
     # Measure lineage
@@ -646,12 +713,12 @@ _EN_US: Dict[str, str] = {
     "table.col.summarization": "Summarization",
     "table.col.hidden": "Hidden",
 
-    "table.section.columns": "📋 Columns",
+    "table.section.columns": "[[icon:columns]] Columns",
     "table.section.calc_columns_summary": "Calculated Columns (Summary)",
     "table.section.calc_columns_dax": "Calculated Columns - DAX Code",
     "table.section.measures_summary": "Measures (Summary)",
     "table.section.measures_dax": "Measures - DAX Code",
-    "table.section.source_data": "💾 Data Source",
+    "table.section.source_data": "[[icon:save]] Data Source",
 
     "table.measure.col.name": "Name",
     "table.measure.col.type": "Type",
@@ -661,17 +728,17 @@ _EN_US: Dict[str, str] = {
     "table.calc.col.type": "Type",
     "table.calc.col.format": "Format",
 
-    "table.status.visible": "🟢 Visible",
-    "table.status.hidden": "🔴 Hidden",
-    "table.refresh.yes": "✅ Yes",
-    "table.refresh.no": "❌ No",
+    "table.status.visible": "[[icon:eye]] Visible",
+    "table.status.hidden": "[[icon:lock]] Hidden",
+    "table.refresh.yes": "[[icon:check]] Yes",
+    "table.refresh.no": "[[icon:x]] No",
     "table.yes": "Yes",
     "table.no": "No",
 
-    "table.source.import": "📥 Import",
-    "table.source.dax": "📝 DAX",
-    "table.source.sql": "🗃️ SQL",
-    "table.source.oracle": "🔷 Oracle",
+    "table.source.import": "[[icon:import]] Import",
+    "table.source.dax": "[[icon:dax]] DAX",
+    "table.source.sql": "[[icon:database]] SQL",
+    "table.source.oracle": "[[icon:database]] Oracle",
     "table.source.mode_label": "**Mode**",
     "table.source.group_label": "**Group**",
     "table.source.code_m": "**Source code (Power Query M)**",
@@ -717,13 +784,13 @@ _EN_US: Dict[str, str] = {
     # Pages / report
     # -------------------------------------------------------------------
     "pages.total": "**Total pages: {n}**",
-    "pages.empty_thin_report": "⚠️ No page found locally. This project may be a **remote report** (thin report) where pages are stored on the Power BI service.",
+    "pages.empty_thin_report": "[[icon:warning]] No page found locally. This project may be a **remote report** (thin report) where pages are stored on the Power BI service.",
     "pages.col.idx": "#",
     "pages.col.name": "Name",
     "pages.col.type": "Type",
     "pages.col.dimensions": "Dimensions",
     "pages.col.filters": "Filters",
-    "pages.section.filters": "🔍 Page Filters",
+    "pages.section.filters": "[[icon:filter]] Page Filters",
     "pages.filter.col.table": "Table",
     "pages.filter.col.column": "Column",
     "pages.filter.col.type": "Type",
@@ -1190,7 +1257,7 @@ _EN_US: Dict[str, str] = {
     # -------------------------------------------------------------------
     # v0.9.0 — Calculation Groups
     # -------------------------------------------------------------------
-    "doc.section.calc_groups": "🧮 Calculation Groups",
+    "doc.section.calc_groups": "[[icon:calc]] Calculation Groups",
     "calc_groups.intro": "Calculation groups let you apply dynamic variations (e.g. YTD, YoY, % Total) on top of existing measures without duplicating them.",
     "calc_groups.precedence": "Precedence",
     "calc_groups.no_items": "No calculation items defined.",
@@ -1202,7 +1269,7 @@ _EN_US: Dict[str, str] = {
     # -------------------------------------------------------------------
     # v0.9.0 — Perspectives
     # -------------------------------------------------------------------
-    "doc.section.perspectives": "👁️ Perspectives",
+    "doc.section.perspectives": "[[icon:eye]] Perspectives",
     "perspectives.intro": "Perspectives are reduced views of the model for different audiences. They expose only a subset of tables, columns and measures — without restricting data access.",
     "perspectives.empty": "Empty perspective (no tables declared).",
     "perspectives.whole_table": "whole table",
@@ -1218,7 +1285,7 @@ _EN_US: Dict[str, str] = {
     # -------------------------------------------------------------------
     # v0.9.0 — Security (RLS + OLS)
     # -------------------------------------------------------------------
-    "doc.section.security": "🔒 Security (RLS / OLS)",
+    "doc.section.security": "[[icon:lock]] Security (RLS / OLS)",
     "security.intro": "Security roles define **who sees what**. RLS (Row-Level Security) filters rows per user; OLS (Object-Level Security) restricts column metadata.",
     "security.model_permission": "Model permission",
     "security.members": "Members",
@@ -1235,7 +1302,7 @@ _EN_US: Dict[str, str] = {
     # -------------------------------------------------------------------
     # v0.9.0 — Named Expressions (M parameters + shared queries)
     # -------------------------------------------------------------------
-    "doc.section.named_expressions": "🔧 Parameters and M Expressions",
+    "doc.section.named_expressions": "[[icon:wrench]] Parameters and M Expressions",
     "named_expressions.intro": "Parameters and shared expressions declared at the model level. M parameters (`IsParameterQuery=true`) can be edited without changing code.",
     "named_expressions.params_heading": "Parameters",
     "named_expressions.queries_heading": "Shared expressions",

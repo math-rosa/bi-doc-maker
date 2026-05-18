@@ -22,3 +22,4 @@ frond-end-app/src-tauri/binaries/*
 _fix_docx.py
 .claude/
 .pyinstaller-src/
+_doc_test_out/
