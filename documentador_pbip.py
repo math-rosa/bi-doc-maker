@@ -5321,6 +5321,12 @@ class DocumentadorPBIP:
         h1 { border-bottom: 2px solid #2980B9; padding-bottom: 0.3em; font-size: 24pt; }
         h2 { border-bottom: 1px solid #EAECEE; padding-bottom: 0.3em; font-size: 18pt; }
         h3 { font-size: 14pt; color: #2980B9; }
+        h4 { font-size: 12pt; color: #1A5276; margin-top: 1.2em; }
+        /* h5 = nome de medida/coluna calculada. Destaque visual de "etiqueta"
+           para nao competir com o "Funcoes DAX usadas" do body que vem abaixo. */
+        h5 { font-size: 11.5pt; color: #1A5276; margin-top: 1.4em; margin-bottom: 0.4em;
+             padding: 6px 12px; background: #EBF5FB; border-left: 4px solid #2980B9;
+             border-radius: 0 4px 4px 0; font-family: 'Consolas', 'Courier New', monospace; }
         table { border-collapse: collapse; width: 100%; margin: 1.5em 0; font-size: 9.5pt; box-shadow: 0 1px 3px rgba(0,0,0,0.1); table-layout: auto; word-break: break-word; }
         th { background-color: #2980B9; color: white; padding: 10px 12px; text-align: left; font-weight: 600; }
         td { border-bottom: 1px solid #EAECEE; padding: 10px 12px; }
