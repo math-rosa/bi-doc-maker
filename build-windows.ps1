@@ -6,7 +6,7 @@ param(
     [string]$CertificateThumbprint = "",
     # URL do servidor de timestamp RFC 3161 (gratuitos: sectigo, digicert, globalsign).
     [string]$TimestampUrl = "http://timestamp.sectigo.com",
-    # Pula a geração do ZIP portatil (so MSI).
+    # Pula a geracao do ZIP portatil (so MSI).
     [switch]$SkipPortable,
     # Pula o rebuild do bootloader PyInstaller. Default = tenta rebuildar
     # (reduz falsos positivos de AV). Para dev local rapido, use -FastBuild.
@@ -117,7 +117,7 @@ else {
         catch {
             Write-Host ""
             Write-Host "    [AVISO] Rebuild do bootloader PyInstaller falhou: $_" -ForegroundColor Yellow
-            Write-Host "    Continuando com bootloader stock — AVs podem flagar mais." -ForegroundColor Yellow
+            Write-Host "    Continuando com bootloader stock - AVs podem flagar mais." -ForegroundColor Yellow
             Write-Host "    Causa provavel: Visual Studio Build Tools nao instalado." -ForegroundColor Yellow
             Write-Host "    Para releases publicas, instale Build Tools com workload C++." -ForegroundColor Yellow
             Write-Host ""
@@ -206,7 +206,7 @@ try {
         if (-not $SkipNpmInstall) {
             Write-Host "==> Instalando dependencias Node"
             # Usamos `npm install` em vez de `npm ci` porque `ci` apaga
-            # node_modules antes de reinstalar — isso falha com EPERM quando
+            # node_modules antes de reinstalar - isso falha com EPERM quando
             # binarios nativos (.node) estao com handle aberto por Defender/
             # OneDrive. `install` faz unlink incremental (mais tolerante a lock).
             npm.cmd install
