@@ -451,6 +451,12 @@ _PT_BR: Dict[str, str] = {
     "validate.hint": "Abra o projeto no Power BI Desktop, salve novamente como PBIP e tente outra vez.",
 
     # -------------------------------------------------------------------
+    # v0.9.3 — Container de medidas
+    # -------------------------------------------------------------------
+    "table.measures_container": "Container de medidas",
+    "table.measures_lower": "medidas",
+
+    # -------------------------------------------------------------------
     # v0.9.0 — Calculation Groups
     # -------------------------------------------------------------------
     "doc.section.calc_groups": "🧮 Grupos de Cálculo",
@@ -1174,6 +1180,12 @@ _EN_US: Dict[str, str] = {
     "validate.missing_report_folder": "Report folder not found: {folder} — documentation will be generated without pages/visuals.",
     "validate.no_tables": "No TMDL tables found in the model — documentation will be minimal.",
     "validate.hint": "Open the project in Power BI Desktop, save it again as PBIP and try again.",
+
+    # -------------------------------------------------------------------
+    # v0.9.3 — Measures container
+    # -------------------------------------------------------------------
+    "table.measures_container": "Measures container",
+    "table.measures_lower": "measures",
 
     # -------------------------------------------------------------------
     # v0.9.0 — Calculation Groups

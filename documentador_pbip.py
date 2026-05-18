@@ -793,6 +793,28 @@ def traduzir_enum_pbir(valor: str) -> str:
     return PBIR_ENUM_TRANSLATIONS.get(valor, valor)
 
 
+# v0.9.3 — Blacklist de termos genericos/tecnicos no Dicionario de Dados.
+# Sao palavras que tipicamente aparecem em nomes de ETAPAS Power Query, em
+# atributos de unpivot ou em placeholders, mas NAO sao termos de negocio.
+# Comparacao usa chave normalizada (lowercase, sem acentos, palavras
+# separadas por espaco) — espelha o que `_extrair_termos_texto` produz.
+_DICIONARIO_BLACKLIST: set = {
+    # Conceitos puramente tecnicos
+    "valor", "valores", "atributo", "atributos",
+    "total", "soma", "tipo", "nome", "data",
+    "coluna", "colunas", "linha", "linhas",
+    "coluna calculada", "colunas calculadas",
+    "substituicao valores", "substituicao de valores",
+    "tipo alterado", "tipo dado", "tipo dados",
+    # Nomes de etapas Power Query comuns
+    "personalizacao adicionada", "outras colunas removidas",
+    "linhas filtradas", "linhas classificadas",
+    "cabecalhos promovidos",
+    # Tokens curtos sem valor semantico isolado
+    "id", "name", "value", "type", "status",
+}
+
+
 def _extrair_termos_texto(texto: str, incluir_frases: bool = True) -> List[Tuple[str, str]]:
     palavras = _separar_palavras_termo(texto)
     if not palavras:
@@ -3585,15 +3607,31 @@ class DocumentadorPBIP:
                 coluna = ''
                 valores = []
 
-                # Tenta extrair tabela/coluna de múltiplas estruturas possíveis
-                # Estrutura "From" (filtros básicos)
+                # PBIR moderno (PBIP gerado por Power BI Desktop atual): a
+                # tabela/coluna do filtro fica em `field.Column` ou
+                # `field.Measure` NA RAIZ do filtro_raw, antes do `filter`.
+                # Antes so olhavamos `filter.Column` e a coluna saia vazia.
+                field_obj = filtro_raw.get('field', {})
+                if isinstance(field_obj, dict):
+                    # field pode ter Column, Measure, HierarchyLevel, etc.
+                    for chave_field in ('Column', 'Measure', 'HierarchyLevel', 'Aggregation'):
+                        f_inner = field_obj.get(chave_field)
+                        if isinstance(f_inner, dict):
+                            coluna = f_inner.get('Property') or f_inner.get('Name') or ''
+                            src_ref = (f_inner.get('Expression') or {}).get('SourceRef', {})
+                            if isinstance(src_ref, dict):
+                                tabela = src_ref.get('Entity', src_ref.get('Source', '')) or tabela
+                            if coluna:
+                                break
+
+                # Estrutura "From" (filtros básicos / fallback PBIR antigo)
                 from_list = filtro.get('From', [])
-                if from_list and isinstance(from_list, list):
+                if not tabela and from_list and isinstance(from_list, list):
                     tabela = from_list[0].get('Entity', from_list[0].get('Name', ''))
 
-                # Estrutura "Column" (filtros avançados)
+                # Estrutura "Column" dentro de `filter` (fallback PBIR antigo)
                 col_obj = filtro.get('Column', {})
-                if col_obj:
+                if not coluna and col_obj:
                     coluna = col_obj.get('Property', '')
                     src_ref = col_obj.get('Expression', {}).get('SourceRef', {})
                     if src_ref and not tabela:
@@ -3828,6 +3866,12 @@ class DocumentadorPBIP:
                 if chave.replace(" ", "") in funcoes_tecnicas:
                     continue
                 if all(p in TERM_IDENTIFIER_WORDS for p in palavras):
+                    continue
+                # v0.9.3 — Blacklist de termos genericos/tecnicos. Sao
+                # palavras que aparecem em nomes de etapas Power Query, em
+                # ruido de placeholders ou em "atributo unpivot" — nao sao
+                # termos de NEGOCIO, entao poluem o dicionario.
+                if chave in _DICIONARIO_BLACKLIST:
                     continue
                 vistos_ocorrencia.add(chave)
 
@@ -4307,12 +4351,65 @@ class DocumentadorPBIP:
         ]
 
     @staticmethod
-    def _classificar_tabela(nome: str) -> str:
-        """Classifica tabela como 'fato', 'dimensao' ou 'outra' a partir do prefixo do nome."""
-        n = (nome or "").lower()
-        if n.startswith(("fat_", "fct_", "fact_")):
+    def _eh_container_medidas(tabela: 'InfoTabela') -> bool:
+        """Detecta o padrao "container de medidas" do Power BI Desktop.
+
+        Convenção universal:
+        - Nome com prefixo `_` (`_Medidas`, `_Measures`, `_Calc`)
+        - 1 coluna apenas, geralmente chamada `Column` (placeholder)
+        - >= 1 medida
+        - Partição DAX `Row("...", BLANK())` ou tipo equivalente
+        - Marcada como oculta (esta_oculta=True) ou só com a coluna oculta
+
+        Quando detectada, a tabela e renderizada com bloco compacto em vez
+        do detalhamento completo (sem fonte de dados ruidosa, sem coluna
+        fake, etc).
+        """
+        nome = tabela.nome or ""
+        if not nome.startswith("_"):
+            return False
+        if len(tabela.colunas) > 1:
+            return False
+        if len(tabela.medidas) == 0:
+            return False
+        # Cheque do código fonte da partição: deve ser `Row(...)` ou BLANK
+        if tabela.particao and tabela.particao.codigo_fonte:
+            codigo = tabela.particao.codigo_fonte.strip()
+            if "Row(" in codigo and "BLANK" in codigo:
+                return True
+        # Se nao tem particao mas tem nome com `_`, 0-1 colunas e >=1 medida,
+        # ainda assim e um container (padrao mais simples).
+        return len(tabela.colunas) <= 1 and len(tabela.medidas) >= 1
+
+    def _classificar_tabela(self, nome: str) -> str:
+        """Classifica tabela como 'fato', 'dimensao' ou 'outra' por heuristicas.
+
+        Heuristicas (ordem de prioridade):
+        1. Flag `eh_fato` (definido por `_is_fact_table`, que olha nome com
+           regex mais generoso: `fato`, `fact`, `fat` em qualquer posicao).
+        2. Convencoes de prefixo/sufixo para dimensoes: `dim_`, `d_`,
+           `d<Maiusculo>` (ex: `dCalendario`), `_dim`, sufixo `Sheet`/`_Sheet`
+           comum em dimensoes "manuais" via Excel.
+        3. Tabelas tipo lookup: `Ordem_*`, `Status_*`, `Tipo_*`.
+        """
+        # Pega a tabela completa (precisa para checar flag eh_fato)
+        tab = next((t for t in self.tabelas if t.nome == nome), None)
+        if tab and tab.eh_fato:
             return "fato"
-        if n.startswith(("dim_", "d_")):
+
+        n = (nome or "").lower()
+        # Prefixos clássicos de dimensão
+        if n.startswith(("dim_", "dim ", "d_")):
+            return "dimensao"
+        # Prefixo `d<Maiuscula>` (dCalendario, dCliente, etc.) - convencao
+        # brasileira/portuguesa comum.
+        if len(nome) >= 2 and nome[0] == 'd' and nome[1].isupper():
+            return "dimensao"
+        # Sufixos comuns de dimensão
+        if n.endswith(("_dim", " dim")):
+            return "dimensao"
+        # Tabelas-lookup: Ordem_*, Status_*, Tipo_*, Cat_*
+        if n.startswith(("ordem_", "ordem ", "status_", "tipo_", "cat_", "lookup_")):
             return "dimensao"
         return "outra"
 
@@ -4685,6 +4782,15 @@ class DocumentadorPBIP:
                 md.append(f"*{tabela.descricao}*")
                 md.append(f"")
 
+            # v0.9.3 — Container de medidas (`_Medidas`, `_Measures` etc.):
+            # adiciona badge informativo. NAO faz `continue` aqui — deixa o
+            # render normal seguir, mas a logica adiante (coluna fake, fonte
+            # Row(BLANK)) sera pulada via `eh_container` abaixo.
+            eh_container = self._eh_container_medidas(tabela)
+            if eh_container:
+                md.append(f"> 📦 **{_t('table.measures_container')}** — {len(tabela.medidas)} {_t('table.measures_lower')}.")
+                md.append(f"")
+
             # Card de metadados com badges
             status_badge = _t("table.status.hidden") if tabela.esta_oculta else _t("table.status.visible")
             refresh_badge = _t("table.refresh.no") if tabela.excluida_refresh else _t("table.refresh.yes")
@@ -4707,8 +4813,8 @@ class DocumentadorPBIP:
             md.append(f"| {status_badge} | {refresh_badge} | {len(tabela.colunas)} | {len(tabela.medidas)} | {fonte_tipo} |")
             md.append(f"")
 
-            # Colunas
-            if tabela.colunas:
+            # Colunas (pulado em container de medidas — coluna `Column` e fake)
+            if tabela.colunas and not eh_container:
                 md.append(f"#### {_t('table.section.columns')}")
                 md.append(f"")
                 md.append(
@@ -4844,8 +4950,8 @@ class DocumentadorPBIP:
                     md.append(f"- **{hier.nome}**: {niveis_str}")
                 md.append(f"")
 
-            # Fonte de Dados
-            if tabela.particao and tabela.particao.codigo_fonte:
+            # Fonte de Dados (pulado em container de medidas — Row(BLANK) e ruido)
+            if tabela.particao and tabela.particao.codigo_fonte and not eh_container:
                 md.append(f"#### {_t('table.section.source_data')}")
                 md.append(f"")
 
